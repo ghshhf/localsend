@@ -22,6 +22,7 @@ private const val REQUEST_CODE_PICK_FILE = 3
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
     private var hotspotRelayPlugin: HotspotRelayPlugin? = null
+    private var usbTetheringPlugin: UsbTetheringPlugin? = null
 
     // Overriding the static methods we need from the Java class, as described
     // in the documentation of `FlutterActivity.NewEngineIntentBuilder`
@@ -41,6 +42,10 @@ class MainActivity : FlutterActivity() {
         // Initialize HotspotRelayPlugin for PRP
         hotspotRelayPlugin = HotspotRelayPlugin(this)
         hotspotRelayPlugin?.configure(flutterEngine)
+
+        // Initialize UsbTetheringPlugin for USB cable relay
+        usbTetheringPlugin = UsbTetheringPlugin(this)
+        usbTetheringPlugin?.configure(flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart';
-import 'package:localsend_app/util/native/hotspot_relay.dart';
+import 'package:localsend_app/util/transport/transports.dart';
 import 'package:logging/logging.dart';
+import 'package:refena_flutter/refena_flutter.dart';
 
-final _logger = Logger('PrpProvider');
+final _logger = Logger('PrpService');
 
 /// PRP (Peer Relay Protocol) modes
 enum PrpMode {
@@ -37,148 +37,245 @@ enum PrpConnectionState {
   disconnected,
 }
 
-/// PRP (Peer Relay Protocol) provider.
+/// PRP state container.
+class PrpState {
+  final PrpMode mode;
+  final PrpConnectionState state;
+  final TransportType transportType;
+  final String? networkName;
+  final String? networkPassword;
+  final String? ipAddress;
+  final String? errorMessage;
+  final bool isUsbTetheringAvailable;
+
+  const PrpState({
+    this.mode = PrpMode.idle,
+    this.state = PrpConnectionState.idle,
+    this.transportType = TransportType.wifiHotspot,
+    this.networkName,
+    this.networkPassword,
+    this.ipAddress,
+    this.errorMessage,
+    this.isUsbTetheringAvailable = false,
+  });
+
+  bool get isActive => mode != PrpMode.idle;
+
+  PrpState copyWith({
+    PrpMode? mode,
+    PrpConnectionState? state,
+    TransportType? transportType,
+    String? networkName,
+    String? networkPassword,
+    String? ipAddress,
+    String? errorMessage,
+    bool clearError = false,
+    bool? isUsbTetheringAvailable,
+  }) {
+    return PrpState(
+      mode: mode ?? this.mode,
+      state: state ?? this.state,
+      transportType: transportType ?? this.transportType,
+      networkName: networkName ?? this.networkName,
+      networkPassword: networkPassword ?? this.networkPassword,
+      ipAddress: ipAddress ?? this.ipAddress,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      isUsbTetheringAvailable: isUsbTetheringAvailable ?? this.isUsbTetheringAvailable,
+    );
+  }
+}
+
+final prpProvider = ReduxProvider<PrpService, PrpState>((ref) {
+  return PrpService();
+});
+
+/// PRP (Peer Relay Protocol) service.
 ///
-/// Manages the lifecycle of hotspot-based peer relay connections.
-/// When devices cannot discover each other on the same LAN, PRP
-/// creates a temporary local network via WiFi hotspot.
-class PrpProvider extends ChangeNotifier {
-  PrpMode _mode = PrpMode.idle;
-  PrpConnectionState _state = PrpConnectionState.idle;
-  HotspotInfo _hotspotInfo = const HotspotInfo(ssid: '', password: '', isRunning: false);
-  String? _errorMessage;
-
-  // Getters
-  PrpMode get mode => _mode;
-  PrpConnectionState get state => _state;
-  HotspotInfo get hotspotInfo => _hotspotInfo;
-  String? get errorMessage => _errorMessage;
-  bool get isActive => _mode != PrpMode.idle;
-
-  // ============================================================
-  //  HOST MODE
-  // ============================================================
-
-  /// Start PRP in host mode (create hotspot).
-  Future<bool> startHostMode() async {
-    _logger.info('Starting PRP host mode...');
-    _mode = PrpMode.host;
-    _state = PrpConnectionState.connecting;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      _hotspotInfo = await startHotspot();
-      _state = PrpConnectionState.connected;
-      notifyListeners();
-      _logger.info('PRP host mode active: ${_hotspotInfo.ssid}');
-      return true;
-    } catch (e) {
-      _state = PrpConnectionState.error;
-      _errorMessage = 'Failed to start hotspot: $e';
-      _logger.severe(_errorMessage);
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// Stop PRP host mode.
-  Future<void> stopHostMode() async {
-    _logger.info('Stopping PRP host mode...');
-    await stopHotspot();
-    _mode = PrpMode.idle;
-    _state = PrpConnectionState.disconnected;
-    _hotspotInfo = const HotspotInfo(ssid: '', password: '', isRunning: false);
-    notifyListeners();
-  }
-
-  // ============================================================
-  //  CLIENT MODE
-  // ============================================================
-
-  /// Connect to a peer hotspot in client mode.
-  Future<bool> connectToPeer({
-    required String ssid,
-    required String password,
-  }) async {
-    _logger.info('Connecting to peer hotspot: $ssid');
-    _mode = PrpMode.client;
-    _state = PrpConnectionState.connecting;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final connected = await connectToHotspot(
-        ssid: ssid,
-        password: password,
-      );
-
-      if (connected) {
-        _state = PrpConnectionState.connected;
-        _hotspotInfo = HotspotInfo(
-          ssid: ssid,
-          password: password,
-          isRunning: true,
-        );
-        notifyListeners();
-        _logger.info('Connected to peer hotspot: $ssid');
-        return true;
-      } else {
-        _state = PrpConnectionState.error;
-        _errorMessage = 'Failed to connect to hotspot';
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      _state = PrpConnectionState.error;
-      _errorMessage = 'Connection error: $e';
-      _logger.severe(_errorMessage);
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// Disconnect client mode.
-  Future<void> disconnectFromPeer() async {
-    _logger.info('Disconnecting from peer hotspot...');
-    await disconnectHotspot();
-    _mode = PrpMode.idle;
-    _state = PrpConnectionState.disconnected;
-    _hotspotInfo = const HotspotInfo(ssid: '', password: '', isRunning: false);
-    notifyListeners();
-  }
-
-  // ============================================================
-  //  HELPERS
-  // ============================================================
-
-  /// Refresh hotspot status.
-  Future<void> refreshStatus() async {
-    if (_mode == PrpMode.host) {
-      _hotspotInfo = await getHotspotInfo();
-      notifyListeners();
-    }
-    if (_mode == PrpMode.client) {
-      final connected = await isConnectedToHotspot();
-      if (!connected && _state == PrpConnectionState.connected) {
-        _state = PrpConnectionState.disconnected;
-        notifyListeners();
-      }
-    }
-  }
-
-  /// Reset all state.
-  void reset() {
-    _mode = PrpMode.idle;
-    _state = PrpConnectionState.idle;
-    _hotspotInfo = const HotspotInfo(ssid: '', password: '', isRunning: false);
-    _errorMessage = null;
-    notifyListeners();
-  }
+/// Manages the lifecycle of peer relay connections using a unified
+/// transport abstraction. Supports multiple transport types:
+/// - WiFi hotspot relay (cross-platform)
+/// - USB tethering (Android 5.0+)
+class PrpService extends ReduxNotifier<PrpState> {
+  final TransportManager _transportManager = TransportManager();
 
   @override
-  void dispose() {
-    reset();
-    super.dispose();
+  PrpState init() {
+    // Initialize transport manager and check USB availability
+    _transportManager.init().then((_) {
+      final isUsbAvailable = _transportManager.availableTransports.contains(TransportType.usbTethering);
+      if (isUsbAvailable) {
+        state = state.copyWith(isUsbTetheringAvailable: true);
+      }
+    });
+    return const PrpState();
+  }
+
+  /// Get available transport types for UI display.
+  List<TransportType> get availableTransports => _transportManager.availableTransports;
+
+  /// Access the transport manager (for direct transport operations).
+  TransportManager get transportManager => _transportManager;
+}
+
+/// Start PRP in host mode using the specified transport.
+class StartHostAction extends AsyncReduxAction<PrpService, PrpState> {
+  final TransportType transportType;
+  final String alias;
+
+  StartHostAction({
+    this.transportType = TransportType.wifiHotspot,
+    this.alias = 'LocalSend',
+  });
+
+  @override
+  Future<PrpState> reduce() async {
+    _logger.info('Starting PRP host mode via $transportType');
+
+    notifier.state = state.copyWith(
+      mode: PrpMode.host,
+      state: PrpConnectionState.connecting,
+      transportType: transportType,
+      clearError: true,
+    );
+
+    final success = await notifier._transportManager.startHost(
+      type: transportType,
+      config: HostConfig(alias: alias),
+    );
+
+    if (success) {
+      final info = notifier._transportManager.activeInfo;
+      return state.copyWith(
+        state: PrpConnectionState.connected,
+        networkName: info?.networkName,
+        networkPassword: info?.password,
+        ipAddress: info?.metadata['ipAddress'] as String?,
+      );
+    } else {
+      return state.copyWith(
+        state: PrpConnectionState.error,
+        errorMessage: notifier._transportManager.activeError ?? 'Failed to start host mode',
+      );
+    }
+  }
+}
+
+/// Stop PRP host mode.
+class StopHostAction extends AsyncReduxAction<PrpService, PrpState> {
+  @override
+  Future<PrpState> reduce() async {
+    _logger.info('Stopping PRP host mode');
+    await notifier._transportManager.stopActive();
+    return state.copyWith(
+      mode: PrpMode.idle,
+      state: PrpConnectionState.disconnected,
+      networkName: null,
+      networkPassword: null,
+      ipAddress: null,
+      clearError: true,
+    );
+  }
+}
+
+/// Connect to a peer as client.
+class ConnectToPeerAction extends AsyncReduxAction<PrpService, PrpState> {
+  final TransportType transportType;
+  final String ssid;
+  final String password;
+
+  ConnectToPeerAction({
+    this.transportType = TransportType.wifiHotspot,
+    required this.ssid,
+    required this.password,
+  });
+
+  @override
+  Future<PrpState> reduce() async {
+    _logger.info('Connecting to peer via $transportType: $ssid');
+
+    notifier.state = state.copyWith(
+      mode: PrpMode.client,
+      state: PrpConnectionState.connecting,
+      transportType: transportType,
+      clearError: true,
+    );
+
+    final success = await notifier._transportManager.connectToHost(
+      type: transportType,
+      config: ConnectConfig(ssid: ssid, password: password),
+    );
+
+    if (success) {
+      final info = notifier._transportManager.activeInfo;
+      return state.copyWith(
+        state: PrpConnectionState.connected,
+        networkName: info?.networkName ?? ssid,
+        networkPassword: info?.password ?? password,
+        ipAddress: info?.metadata['ipAddress'] as String?,
+      );
+    } else {
+      return state.copyWith(
+        state: PrpConnectionState.error,
+        errorMessage: notifier._transportManager.activeError ?? 'Failed to connect',
+      );
+    }
+  }
+}
+
+/// Disconnect from peer.
+class DisconnectPeerAction extends AsyncReduxAction<PrpService, PrpState> {
+  @override
+  Future<PrpState> reduce() async {
+    _logger.info('Disconnecting from peer');
+    await notifier._transportManager.disconnectActive();
+    return state.copyWith(
+      mode: PrpMode.idle,
+      state: PrpConnectionState.disconnected,
+      networkName: null,
+      networkPassword: null,
+      ipAddress: null,
+      clearError: true,
+    );
+  }
+}
+
+/// Switch transport type.
+class SwitchTransportAction extends SyncReduxAction<PrpService, PrpState> {
+  final TransportType transportType;
+
+  SwitchTransportAction(this.transportType);
+
+  @override
+  PrpState reduce() {
+    _logger.info('Switching transport to $transportType');
+    return state.copyWith(transportType: transportType);
+  }
+}
+
+/// Refresh transport status.
+class RefreshPrpStatusAction extends AsyncReduxAction<PrpService, PrpState> {
+  @override
+  Future<PrpState> reduce() async {
+    final transport = notifier._transportManager.activeTransport;
+    if (transport == null) return state;
+
+    if (transport is WifiHotspotTransport) {
+      final info = await transport.getCurrentInfo();
+      return state.copyWith(
+        networkName: info.networkName,
+        networkPassword: info.password,
+      );
+    }
+
+    return state;
+  }
+}
+
+/// Reset PRP state.
+class ResetPrpAction extends AsyncReduxAction<PrpService, PrpState> {
+  @override
+  Future<PrpState> reduce() async {
+    await notifier._transportManager.disconnectActive();
+    return const PrpState();
   }
 }

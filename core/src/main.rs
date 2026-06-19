@@ -47,6 +47,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+/// ⚠️ Test/example RSA private key.
+/// Used only by the test binary for local dev/testing.
+/// Do NOT use in production — generate a fresh key at runtime.
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEAqeusikjBGJ/mqG+RYPyNaP2M6/YafR5bVcEr0NirDntRaSI8
 SBVy6ezqGnpJJpez2rVcLfqPOZNW+yhiWmX/DFGAbKWNUjpAfEgQ0ySS3EKEfTGa

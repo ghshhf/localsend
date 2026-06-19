@@ -75,6 +75,30 @@ jobs:
         working-directory: common
         run: dart test
 
+  rust:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Check (core)
+        working-directory: core
+        run: cargo check --all-features
+      - name: Test (core)
+        working-directory: core
+        run: cargo test --all-features
+
+      - name: Check (server)
+        working-directory: server
+        run: cargo check --all-features
+      - name: Test (server)
+        working-directory: server
+        run: cargo test --all-features
+
   packaging:
     runs-on: ubuntu-latest
 
