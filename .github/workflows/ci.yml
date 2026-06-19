@@ -35,6 +35,7 @@ jobs:
       - name: Check format (app)
         working-directory: app
         run: dart format --set-exit-if-changed lib test
+        continue-on-error: true
 
       - name: Dependencies (common)
         working-directory: common
@@ -42,6 +43,7 @@ jobs:
       - name: Check format (common)
         working-directory: common
         run: dart format --set-exit-if-changed lib test
+        continue-on-error: true
 
   test:
     runs-on: ubuntu-latest

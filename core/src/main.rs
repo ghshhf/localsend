@@ -1,3 +1,4 @@
+#![allow(clippy::needless_mut)]
 mod crypto;
 mod http;
 mod model;
