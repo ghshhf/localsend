@@ -10,9 +10,9 @@ use hyper::StatusCode;
 pub(crate) async fn nonce_exchange(
     body: Incoming,
     state: AppState,
-    _client_info: RequestClientInfo,
+    client_info: RequestClientInfo,
 ) -> Result<JsonResponse<NonceResponse>, AppError> {
-    let _payload = body.collect_to_json::<NonceRequest>().await?;
+    let payload = body.collect_to_json::<NonceRequest>().await?;
 
     let nonce = util::base64::decode(&payload.nonce).map_err(|_| {
         tracing::warn!("Failed to decode nonce from base64");
