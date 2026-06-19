@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:localsend_app/util/transport/transport_interface.dart';
 import 'package:logging/logging.dart';
@@ -16,14 +15,17 @@ final _logger = Logger('WifiHotspotTransport');
 /// Currently supports Android via [HotspotRelayPlugin].
 /// Cross-platform support planned per TransportInterface contract.
 class WifiHotspotTransport implements TransportInterface {
-  static const _channel = MethodChannel('org.localsend.localsend_app/hotspot_relay');
+  static const _channel =
+      MethodChannel('org.localsend.localsend_app/hotspot_relay');
 
   TransportState _state = TransportState.idle;
   TransportInfo? _transportInfo;
   String? _errorMessage;
 
-  final StreamController<PeerInfo> _peerController = StreamController<PeerInfo>.broadcast();
-  final StreamController<TransportState> _stateController = StreamController<TransportState>.broadcast();
+  final StreamController<PeerInfo> _peerController =
+      StreamController<PeerInfo>.broadcast();
+  final StreamController<TransportState> _stateController =
+      StreamController<TransportState>.broadcast();
 
   @override
   TransportType get type => TransportType.wifiHotspot;
@@ -40,7 +42,8 @@ class WifiHotspotTransport implements TransportInterface {
   @override
   bool get isAvailable {
     try {
-      return Platform.isAndroid; // Currently only Android supports hotspot relay
+      return Platform
+          .isAndroid; // Currently only Android supports hotspot relay
     } catch (e) {
       _logger.warning('Platform check failed in isAvailable: $e');
       return false;

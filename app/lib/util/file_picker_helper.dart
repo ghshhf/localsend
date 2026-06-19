@@ -3,8 +3,9 @@
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// File picker helper - safely handles platform-specific permissions
 class FilePickerHelper {
@@ -39,7 +40,8 @@ class FilePickerHelper {
       );
 
       if (result != null && result.files.isNotEmpty) {
-        debugPrint('[FilePicker] Successfully selected ${result.files.length} file(s)');
+        debugPrint(
+            '[FilePicker] Successfully selected ${result.files.length} file(s)');
         return result.files;
       } else {
         debugPrint('[FilePicker] User cancelled selection');
@@ -137,7 +139,8 @@ class FilePickerHelper {
 
     // If permission permanently denied, guide user to settings
     if (await Permission.storage.isPermanentlyDenied) {
-      debugPrint('[FilePicker] Permission permanently denied, need to open settings');
+      debugPrint(
+          '[FilePicker] Permission permanently denied, need to open settings');
       await openAppSettings();
       return false;
     }
@@ -205,7 +208,8 @@ class FilePickerHelper {
       );
 
       if (result != null && result.files.isNotEmpty) {
-        debugPrint('[FilePicker] Fallback method selected ${result.files.length} file(s)');
+        debugPrint(
+            '[FilePicker] Fallback method selected ${result.files.length} file(s)');
         return result.files;
       }
     } catch (e) {

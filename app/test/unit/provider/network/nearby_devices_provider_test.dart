@@ -1,7 +1,6 @@
 import 'package:common/model/device.dart';
 import 'package:localsend_app/model/state/nearby_devices_state.dart';
 import 'package:localsend_app/provider/network/nearby_devices_provider.dart';
-import 'package:refena_flutter/refena_flutter.dart';
 import 'package:test/test.dart';
 
 void main() {

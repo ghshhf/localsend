@@ -22,8 +22,10 @@ class TransportManager {
   bool _initialized = false;
 
   // Aggregated streams
-  final StreamController<PeerInfo> _peerController = StreamController<PeerInfo>.broadcast();
-  final StreamController<TransportState> _stateController = StreamController<TransportState>.broadcast();
+  final StreamController<PeerInfo> _peerController =
+      StreamController<PeerInfo>.broadcast();
+  final StreamController<TransportState> _stateController =
+      StreamController<TransportState>.broadcast();
 
   /// All available transports.
   List<TransportInterface> get transports => [_wifiTransport, _usbTransport];
@@ -50,7 +52,8 @@ class TransportManager {
       await _usbTransport.init();
 
       // Wire up WiFi transport events
-      _wifiTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
+      _wifiTransport.onPeerDiscovered
+          .listen((peer) => _peerController.add(peer));
       _wifiTransport.onStateChanged.listen((state) {
         if (_activeTransport == _wifiTransport) {
           _stateController.add(state);
@@ -58,7 +61,8 @@ class TransportManager {
       });
 
       // Wire up USB transport events
-      _usbTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
+      _usbTransport.onPeerDiscovered
+          .listen((peer) => _peerController.add(peer));
       _usbTransport.onStateChanged.listen((state) {
         if (_activeTransport == _usbTransport) {
           _stateController.add(state);
@@ -86,7 +90,8 @@ class TransportManager {
   }
 
   /// Start host mode on the given transport type.
-  Future<bool> startHost({required TransportType type, required HostConfig config}) async {
+  Future<bool> startHost(
+      {required TransportType type, required HostConfig config}) async {
     final transport = getTransport(type);
     if (transport == null) {
       _logger.warning('Transport $type not available');
@@ -104,7 +109,8 @@ class TransportManager {
   }
 
   /// Connect to a host via the given transport type.
-  Future<bool> connectToHost({required TransportType type, required ConnectConfig config}) async {
+  Future<bool> connectToHost(
+      {required TransportType type, required ConnectConfig config}) async {
     final transport = getTransport(type);
     if (transport == null) {
       _logger.warning('Transport $type not available');
@@ -140,7 +146,8 @@ class TransportManager {
   }
 
   /// Get the current state of the active transport.
-  TransportState get activeState => _activeTransport?.state ?? TransportState.idle;
+  TransportState get activeState =>
+      _activeTransport?.state ?? TransportState.idle;
 
   /// Get the current transport info of the active transport.
   TransportInfo? get activeInfo => _activeTransport?.transportInfo;
