@@ -9,9 +9,9 @@ use hyper::StatusCode;
 pub(crate) async fn register(
     body: Incoming,
     state: AppState,
-    client_info: RequestClientInfo,
+    _client_info: RequestClientInfo,
 ) -> Result<JsonResponse<RegisterResponseDto>, AppError> {
-    let payload = body.collect_to_json::<RegisterDto>().await?;
+    let _payload = body.collect_to_json::<RegisterDto>().await?;
 
     let info = state.info.lock().await.clone();
     let has_web_interface = state.web.lock().await.is_some();

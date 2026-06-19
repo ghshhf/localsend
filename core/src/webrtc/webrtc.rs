@@ -118,7 +118,7 @@ pub struct RTCFile {
 #[derive(Debug)]
 struct RTCFileState {
     file_id: String,
-    size: u64,
+    _size: u64,
     binary_tx: mpsc::Sender<Bytes>,
 }
 
