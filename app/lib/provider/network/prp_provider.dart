@@ -139,6 +139,10 @@ class StartHostAction extends AsyncReduxAction<PrpService, PrpState> {
   Future<PrpState> reduce() async {
     _logger.info('Starting PRP host mode via $transportType');
 
+    // Update state to "connecting" for immediate UI feedback.
+    // ignore: internal_member — notifier.state is the intended way to
+    // push interim state updates within AsyncReduxAction in Refena.
+    //noinspection: invalid_use_of_internal_member
     notifier.state = state.copyWith(
       mode: PrpMode.host,
       state: PrpConnectionState.connecting,
@@ -202,6 +206,8 @@ class ConnectToPeerAction extends AsyncReduxAction<PrpService, PrpState> {
   Future<PrpState> reduce() async {
     _logger.info('Connecting to peer via $transportType: $ssid');
 
+    // ignore: internal_member — interim state push for UI feedback
+    //noinspection: invalid_use_of_internal_member
     notifier.state = state.copyWith(
       mode: PrpMode.client,
       state: PrpConnectionState.connecting,
