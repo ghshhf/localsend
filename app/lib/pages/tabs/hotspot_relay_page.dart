@@ -421,7 +421,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
           ? theme.colorScheme.primaryContainer
           : isActive
               ? theme.colorScheme.tertiaryContainer
-              : theme.colorScheme.surfaceVariant,
+              : theme.colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -609,7 +609,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant,
+                color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Row(
