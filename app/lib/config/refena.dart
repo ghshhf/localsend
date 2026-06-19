@@ -25,10 +25,14 @@ class CustomRefenaObserver extends RefenaMultiObserver {
 }
 
 bool _exclude(RefenaEvent event) {
-  return switch (event) {
-    ChangeEvent() => event.notifier is DiscoveryLogger || event.notifier is LocalIpService || event.notifier is ProgressNotifier,
-    ActionDispatchedEvent() => event.action.runtimeType.toString() == '_FetchLocalIpAction',
-    ActionFinishedEvent() => event.action.runtimeType.toString() == '_FetchLocalIpAction',
-    _ => false,
-  };
+  if (event is ChangeEvent) {
+    return event.notifier is DiscoveryLogger ||
+        event.notifier is LocalIpService ||
+        event.notifier is ProgressNotifier;
+  }
+  if (event is ActionDispatchedEvent || event is ActionFinishedEvent) {
+    final actionType = event.action.runtimeType.toString();
+    return actionType == '_FetchLocalIpAction';
+  }
+  return false;
 }

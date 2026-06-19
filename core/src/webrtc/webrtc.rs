@@ -116,7 +116,6 @@ pub struct RTCFile {
 }
 
 #[derive(Debug)]
-#[derive(Debug)]
 struct RTCFileState {
     file_id: String,
     #[allow(dead_code)]
