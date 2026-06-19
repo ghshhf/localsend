@@ -6,6 +6,7 @@ publish_to: "none"
 version: 1.17.0+58
 
 environment:
+  # CI uses Flutter 3.35.6 (see .github/workflows/ci.yml FLUTTER_VERSION)
   flutter: ^3.25.0
   sdk: ^3.9.0
 

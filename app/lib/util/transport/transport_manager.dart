@@ -19,6 +19,7 @@ class TransportManager {
   final WifiHotspotTransport _wifiTransport = WifiHotspotTransport();
   final UsbTetheringTransport _usbTransport = UsbTetheringTransport();
   TransportInterface? _activeTransport;
+  bool _initialized = false;
 
   // Aggregated streams
   final StreamController<PeerInfo> _peerController = StreamController<PeerInfo>.broadcast();
@@ -38,28 +39,38 @@ class TransportManager {
 
   /// Initialize all transports.
   Future<void> init() async {
+    if (_initialized) {
+      _logger.warning('TransportManager already initialized, skipping');
+      return;
+    }
     _logger.info('Initializing transport manager');
 
-    // Initialize USB tethering detection
-    await _usbTransport.init();
+    try {
+      // Initialize USB tethering detection
+      await _usbTransport.init();
 
-    // Wire up WiFi transport events
-    _wifiTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
-    _wifiTransport.onStateChanged.listen((state) {
-      if (_activeTransport == _wifiTransport) {
-        _stateController.add(state);
-      }
-    });
+      // Wire up WiFi transport events
+      _wifiTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
+      _wifiTransport.onStateChanged.listen((state) {
+        if (_activeTransport == _wifiTransport) {
+          _stateController.add(state);
+        }
+      });
 
-    // Wire up USB transport events
-    _usbTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
-    _usbTransport.onStateChanged.listen((state) {
-      if (_activeTransport == _usbTransport) {
-        _stateController.add(state);
-      }
-    });
+      // Wire up USB transport events
+      _usbTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
+      _usbTransport.onStateChanged.listen((state) {
+        if (_activeTransport == _usbTransport) {
+          _stateController.add(state);
+        }
+      });
 
-    _logger.info('Transport manager initialized');
+      _initialized = true;
+      _logger.info('Transport manager initialized');
+    } catch (e, st) {
+      _logger.severe('Failed to initialize TransportManager', e, st);
+      rethrow;
+    }
   }
 
   /// Get a transport by type.
@@ -147,10 +158,12 @@ class TransportManager {
 
   /// Clean up all resources.
   Future<void> dispose() async {
+    if (!_initialized) return;
     await stopActive();
     await _wifiTransport.dispose();
     await _usbTransport.dispose();
     await _peerController.close();
     await _stateController.close();
+    _initialized = false;
   }
 }

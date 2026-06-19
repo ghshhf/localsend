@@ -97,16 +97,23 @@ final prpProvider = ReduxProvider<PrpService, PrpState>((ref) {
 /// - USB tethering (Android 5.0+)
 class PrpService extends ReduxNotifier<PrpState> {
   final TransportManager _transportManager = TransportManager();
+  bool _isInitializing = false;
 
   @override
   PrpState init() {
-    // Initialize transport manager and check USB availability
-    _transportManager.init().then((_) {
-      final isUsbAvailable = _transportManager.availableTransports.contains(TransportType.usbTethering);
-      if (isUsbAvailable) {
-        state = state.copyWith(isUsbTetheringAvailable: true);
-      }
-    });
+    // Fire-and-forget async initialization.
+    // ReduxNotifier.init() is synchronous in Refena — we update state
+    // via [state=] once the transport manager finishes initializing.
+    if (!_isInitializing) {
+      _isInitializing = true;
+      _transportManager.init().then((_) {
+        final isUsbAvailable =
+            _transportManager.availableTransports.contains(TransportType.usbTethering);
+        state = state.copyWith(isUsbTetheringAvailable: isUsbAvailable);
+      }).catchError((Object e, StackTrace st) {
+        _logger.warning('TransportManager init failed: $e', e, st);
+      });
+    }
     return const PrpState();
   }
 
