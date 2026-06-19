@@ -93,7 +93,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                     selected: _selectedTransport == type,
                     onSelected: (_) {
                       setState(() => _selectedTransport = type);
-                      prpService.dispatchAsync(SwitchTransportAction(type));
+                      prpService.dispatch(SwitchTransportAction(type));
                     },
                   ),
                 )),
@@ -354,7 +354,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                               ? Icons.usb
                               : Icons.wifi_find),
                       color: theme.colorScheme.primary,
-                      onPressed: _canConnect(prp.state)
+                      onPressed: _canConnect(prpState)
                           ? () => prpService.dispatchAsync(
                                 ConnectToPeerAction(
                                   transportType: _selectedTransport,
