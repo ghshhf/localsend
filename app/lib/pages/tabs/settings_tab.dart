@@ -13,6 +13,7 @@ import 'package:localsend_app/pages/changelog_page.dart';
 import 'package:localsend_app/pages/donation/donation_page.dart';
 import 'package:localsend_app/pages/language_page.dart';
 import 'package:localsend_app/pages/settings/network_interfaces_page.dart';
+import 'package:localsend_app/pages/tabs/hotspot_relay_page.dart';
 import 'package:localsend_app/pages/tabs/settings_tab_controller.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
 import 'package:localsend_app/provider/version_provider.dart';
@@ -492,6 +493,13 @@ class SettingsTab extends StatelessWidget {
                     title: t.settingsTab.other.title,
                     padding: const EdgeInsets.only(bottom: 0),
                     children: [
+                      _ButtonEntry(
+                        label: 'PRP - Peer Relay',
+                        buttonLabel: t.general.open,
+                        onTap: () async {
+                          await context.push(() => const PrpPage());
+                        },
+                      ),
                       _ButtonEntry(
                         label: t.aboutPage.title,
                         buttonLabel: t.general.open,
