@@ -74,7 +74,6 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
   // ============================================================
 
   Widget _buildTransportSelector() {
-    final prpState = context.ref.watch(prpProvider);
     final prpService = context.redux(prpProvider);
     final available = prpService.notifier.availableTransports;
     if (available.length <= 1) return const SizedBox.shrink();
