@@ -188,6 +188,44 @@ For more information, see the [contributing guide](https://github.com/localsend/
 | Speed too slow     | Any                | Any                  | Use 5 Ghz; Disable encryption on both devices                                                                                           |
 | Speed too slow     | Any                | Android              | Known issue. https://github.com/flutter-cavalry/saf_stream/issues/4                                                                     |
 
+## FAQ
+
+**Q: Does LocalSend require an internet connection?**  
+A: No, LocalSend works completely offline. It uses your local network (Wi-Fi or Ethernet) to transfer files between devices.
+
+**Q: Is my data secure?**  
+A: Yes! All transfers are encrypted using HTTPS. The TLS/SSL certificate is generated locally on each device, ensuring end-to-end security.
+
+**Q: Why can't my device see other devices?**  
+A:  
+1. Make sure all devices are on the same Wi-Fi network  
+2. Disable AP isolation on your router  
+3. Check firewall settings (allow port 53317)  
+4. On Windows, set your network as "Private"  
+5. On macOS/iOS, enable "Local Network" permission in Privacy settings  
+
+**Q: How do I transfer files?**  
+A:  
+1. Open LocalSend on both devices  
+2. Select files on the sending device  
+3. Tap on the receiving device's name  
+4. Accept the transfer on the receiving device  
+
+**Q: Can I send files to multiple devices at once?**  
+A: Yes! Use the "Multiple recipients" mode in the send tab.
+
+**Q: Where do received files go?**  
+A: By default, files are saved to your Downloads folder. You can change this in Settings.
+
+**Q: Is there a file size limit?**  
+A: There is no hardcoded limit, but very large files may take longer to transfer depending on your network speed.
+
+**Q: Can I use LocalSend at my company/school?**  
+A: It depends on the network configuration. Some corporate/school networks have AP isolation enabled, which prevents device discovery.
+
+**Q: How do I enable portable mode?**  
+A: Create an empty file named `settings.json` in the same directory as the executable. The app will store settings there instead of the default location.
+
 ## Building
 
 These commands are intended for maintainers only. Make sure to run them from the `app` directory.
