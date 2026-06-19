@@ -1,200 +1,538 @@
-# Contributing to LocalSend
+# Contributing to LocalSend 🚀
 
-LocalSend is an open-source project, and we welcome contributions from anyone who is interested in helping improve the app. Whether you're a developer, a translator, or a documentation writer, there are many ways to get involved.
+Thank you for your interest in contributing to LocalSend! This guide will help you get started, whether you're a developer, translator, or documentation writer.
 
-## Getting Started
+**Table of Contents**
+- [🎯 First Contribution? Start Here!](#first-contribution)
+- [📋 Ways to Contribute](#ways-to-contribute)
+- [💻 Contributing Code](#contributing-code)
+- [🌍 Translating](#translating)
+- [📝 Improving Documentation](#improving-documentation)
+- [🐛 Bug Reports & Feature Requests](#bug-reports--feature-requests)
+- [📦 Distribution](#distribution)
+- [✅ Contribution Guidelines](#contribution-guidelines)
+- [❓ Troubleshooting](#troubleshooting)
+- [🔒 Security Issues](#security-issues)
 
-If you're interested in contributing code to LocalSend, you'll need to follow these steps:
+---
 
-## Run
+## 🎯 First Contribution? Start Here!
 
-After you have installed [Flutter](https://flutter.dev), then you can start this app by typing the following commands:
+Welcome! Here's a simple checklist to make your first contribution:
 
-```shell
-cd app
-flutter pub get
-dart run build_runner build -d
-flutter run
+### ✅ Step 1: Set Up Git
+```bash
+# Configure your identity
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+
+# Generate a Personal Access Token (PAT) on GitHub:
+# 1. Go to https://github.com/settings/tokens
+# 2. Click "Generate new token (classic)"
+# 3. Select "repo" scope
+# 4. Copy the token (starts with ghp_)
 ```
 
-## Translation
+### ✅ Step 2: Fork & Clone
+```bash
+# 1. Fork the repository on GitHub (click "Fork" button)
+# 2. Clone YOUR fork
+git clone https://github.com/YOUR_USERNAME/localsend.git
+cd localsend
+```
 
-You can help in translating this app to other languages!
+### ✅ Step 3: Choose a Simple Task
+**New to open source?** Start with one of these:
+- 📝 Fix a typo in documentation
+- 🌍 Add missing translations
+- 🐛 Fix a small bug (look for "good first issue" label)
 
-1. Fork this repository
-2. Choose one
-   - Add missing translations in existing languages: Only update `_missing_translations_<locale>.json` in [assets/i18n](https://github.com/localsend/localsend/tree/main/app/assets/i18n)
-   - Fix existing translations: Update `strings_<locale>.i18n.json` in [assets/i18n](https://github.com/localsend/localsend/tree/main/app/assets/i18n)
-   - Add new languages: Create a new file, see also: [locale codes](https://saimana.com/list-of-country-locale-code/).
-3. Optional: Re-run this app
-   1. Run `cd app` to enter the app directory.
-   2. Make sure you have [run](#run) this app once.
-   3. Update translations via `flutter pub run slang`
-   4. Run the app via `flutter run`
-4. Open a pull request
+### ✅ Step 4: Make Your Changes
+```bash
+# Create a new branch
+git checkout -b fix/typo-in-readme
 
-**_Take note:_ Fields decorated with `@` are not meant to be translated, they are not used in the app in any way, being merely informative text about the file or to give context to the translator.**
+# Make your changes...
+# Test them...
 
-Thanks to all [translators](https://github.com/localsend/localsend/tree/main/app/lib/pages/about/translators.dart)!
+# Commit your changes
+git add .
+git commit -m "fix: correct typo in README.md"
+```
 
-## Contributing Guidelines
+### ✅ Step 5: Push & Create PR
+```bash
+# Push to your fork
+git push origin fix/typo-in-readme
 
-Before you submit a pull request to LocalSend, please ensure that you have followed these guidelines:
+# Go to GitHub and create a Pull Request
+# (GitHub will show a "Compare & pull request" button)
+```
 
-- Code should be well-documented and formatted according to the [Dart Style Guide](https://dart.dev/guides/language/effective-dart/style).
-- All changes should be covered by tests.
-- Commits should be well-written and descriptive, with a clear summary of the changes made and any relevant context.
-- Pull requests should target the `main` branch and include a clear summary of the changes made.
+**That's it!** 🎉 Maintainers will review your PR and provide feedback.
 
-## Bug Reports and Feature Requests
+---
 
-If you encounter a bug in LocalSend or have a feature request, please submit an issue to the [issue tracker](https://github.com/localsend/localsend/issues). Please be sure to provide a clear description of the problem or feature request, along with any relevant context or steps to reproduce the issue.
+## 📋 Ways to Contribute
 
-## Security Issues
+You don't need to be a programmer to contribute! Here are all the ways you can help:
 
-If you discover a security issue in LocalSend, please do not submit an issue to the public issue tracker. Instead, please email us directly at [support@localsend.org](mailto:support@localsend.org) so that we can address the issue as quickly and effectively as possible.
+| Type | Skills Needed | Difficulty | Impact |
+|------|---------------|------------|---------|
+| 🌍 **Translation** | Foreign language | ⭐ Easy | 🌍 Global reach |
+| 📝 **Documentation** | Writing | ⭐ Easy | 📚 Better onboarding |
+| 🐛 **Bug Fixes** | Dart/Flutter | ⭐⭐ Medium | 🛠️ Stability |
+| ✨ **New Features** | Dart/Flutter | ⭐⭐⭐ Hard | 🚀 Innovation |
+| 📦 **Packaging** | Linux/DevOps | ⭐⭐ Medium | 📦 Easy installation |
+| 🧪 **Testing** | Dart/Flutter | ⭐⭐ Medium | ✅ Quality |
 
-## Distribution
+---
 
-Git based distribution:
+## 💻 Contributing Code
 
-| Channel        | Repository          | Maintainer                                         |
-|----------------|---------------------|----------------------------------------------------|
-| [Winget][]     | [Winget Repo][]     | [@sitiom][], [@Tienisto], Github Actions           |
-| [Scoop][]      | [Scoop Repo][]      | [@sitiom][], [@Tienisto], Github Actions           |
-| [Chocolatey][] | [Chocolatey Repo][] | [@brogers5][]                                      |
-| [Homebrew][]   | [Homebrew Repo][]   | [@Tienisto][], Github Actions                      |
-| [Flathub][]    | [Flathub Repo][]    | [@proletarius101][], [@Tienisto][], Github Actions |
-| [AUR][]        | [AUR Repo][]        | [@Nixuge][]                                        |
-| [Nixpkgs][]    | [Nixpkgs Repo][]    | [@sikmir][], [@linsui][]                           |
-| [F-Droid][]    | [F-Droid Repo][]    | [@linsui][], [@Tienisto][], [F-Droid CI][]         |
-| [Snap][]       | [Snap Repo][]       | [@thatLeaflet][]                                   |
+### Prerequisites
 
-[winget]: https://github.com/microsoft/winget-pkgs/tree/master/manifests/l/LocalSend/LocalSend
-[winget repo]: https://github.com/microsoft/winget-pkgs/tree/master/manifests/l/LocalSend/LocalSend
-[scoop]: https://scoop.sh/#/apps?s=0&d=1&o=true&q=localsend&id=fb88113be361ca32c0dcac423cb4afdeda0b0c66
-[scoop repo]: https://github.com/ScoopInstaller/Extras/blob/master/bucket/localsend.json
-[chocolatey]: https://community.chocolatey.org/packages/localsend
-[chocolatey repo]: https://github.com/brogers5/chocolatey-package-localsend/tree/main
-[homebrew]: https://formulae.brew.sh/cask/localsend
-[homebrew repo]: https://github.com/Homebrew/homebrew-cask/blob/master/Casks/l/localsend.rb
-[flathub]: https://flathub.org/apps/details/org.localsend.localsend_app
-[flathub repo]: https://github.com/flathub/org.localsend.localsend_app
-[aur]: https://aur.archlinux.org/packages/localsend-bin
-[aur repo]: https://aur.archlinux.org/localsend-bin.git
-[nixpkgs]: https://search.nixos.org/packages?show=localsend
-[nixpkgs repo]: https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/networking/localsend/default.nix
-[f-droid]: https://f-droid.org/packages/org.localsend.localsend_app
-[f-droid repo]: https://gitlab.com/fdroid/fdroiddata/-/blob/master/metadata/org.localsend.localsend_app.yml
-[snap]: https://snapcraft.io/localsend
-[snap repo]: https://github.com/localsend/snap
+Before you start coding, make sure you have:
+- ✅ [Flutter SDK](https://flutter.dev/get-started) (check `.fvmrc` for required version)
+- ✅ [FVM](https://fvm.app) (Flutter Version Manager) - *recommended*
+- ✅ [Rust](https://www.rust-lang.org/tools/install) (for native modules)
+- ✅ Git
 
-Manual distribution:
+### Step-by-Step Setup
 
-| Channel        | Maintainer                               |
-|----------------|------------------------------------------|
-| [App Store][]  | [@Tienisto](https://github.com/Tienisto) |
-| [Play Store][] | [@Tienisto](https://github.com/Tienisto) |
-| [Amazon][]     | [@Tienisto](https://github.com/Tienisto) |
+#### 1️⃣ Install Flutter via FVM (Recommended)
+```bash
+# Install FVM
+dart pub global activate fvm
 
-[app store]: https://apps.apple.com/us/app/localsend/id1661733229
-[play store]: https://play.google.com/store/apps/details?id=org.localsend.localsend_app
-[amazon]: https://www.amazon.com/dp/B0BW6MP732
+# Use the correct Flutter version for this project
+cd localsend
+fvm install
+fvm use
+```
 
-Binary distribution:
+#### 2️⃣ Install Dependencies
+```bash
+cd app
+fvm flutter pub get
+dart run build_runner build -d
+```
 
-| Type        | Maintainer    | Credits                      |
-|-------------|---------------|------------------------------|
-| Windows ZIP | [@Tienisto][] |                              |
-| MSIX        | [@Tienisto][] |                              |
-| EXE         | [@Tienisto][] |                              |
-| APK         | [@Tienisto][] |                              |
-| TAR         | [@Tienisto][] |                              |
-| DEB         | [@Tienisto][] |                              |
-| AppImage    | [@Tienisto][] | [@TheGB0077][]               |
-| DMG         | [@Tienisto][] |                              |
+#### 3️⃣ Run the App
+```bash
+# Debug mode (hot reload enabled)
+fvm flutter run
 
-[@Tienisto]: https://github.com/Tienisto
-[@TheGB0077]: https://github.com/TheGB0077
-[@sitiom]: https://github.com/sitiom
-[@Nixuge]: https://github.com/Nixuge
-[@proletarius101]: https://github.com/proletarius101
-[@brogers5]: https://github.com/brogers5
-[@sikmir]: https://github.com/sikmir
-[@linsui]: https://github.com/linsui
-[@thatLeaflet]: https://github.com/thatLeaflet
-[F-Droid CI]: https://gitlab.com/fdroidci
+# Release mode (faster, no hot reload)
+fvm flutter run --release
+```
 
-TODO:
+#### 4️⃣ Make Your Changes
+- 📝 **Follow the [Dart Style Guide](https://dart.dev/guides/language/effective-dart/style)**
+- 🧪 **Write tests** for your changes
+- 📝 **Document your code** (especially public APIs)
 
-You can help in publishing LocalSend on more platforms. Please create an issue to notify us!
+#### 5️⃣ Test Your Changes
+```bash
+# Run all tests
+fvm flutter test
 
-- Traditional Linux distributions (Debian, Fedora, etc.)
-- (Your idea here)
+# Run tests with coverage
+fvm flutter test --coverage
 
-## Notes
+# Check code formatting
+fvm flutter format --set-exit-if-changed .
+```
 
-Useful notes.
+#### 6️⃣ Commit & Push
+```bash
+# Stage your changes
+git add .
 
-### Compile production APK
+# Commit with a descriptive message
+git commit -m "feat: add dark mode support for settings page"
 
-You will need the signing keys to generate an APK.
+# Push to your fork
+git push origin your-branch-name
+```
 
-Either generate one or use the debug signing options:
+#### 7️⃣ Create a Pull Request
+- Go to https://github.com/YOUR_USERNAME/localsend
+- Click "Compare & pull request"
+- Fill in the PR template
+- Link any related issues
 
-```groovy
-// File: android/app/build.gradle
-buildTypes {
-  release {
-    signingConfig signingConfigs.debug // using debug signing
+---
+
+## 🌍 Translating
+
+Help make LocalSend available in more languages!
+
+### Method 1: Using Weblate (Easiest) ⭐⭐⭐
+
+1. Go to [Weblate Translation Platform](https://hosted.weblate.org/projects/localsend/app)
+2. Create an account or log in
+3. Select a language
+4. Translate the missing strings
+5. Done! No coding required!
+
+### Method 2: Manual Translation (For Developers)
+
+#### Step 1: Fork & Clone
+```bash
+git clone https://github.com/YOUR_USERNAME/localsend.git
+cd localsend/app/assets/i18n
+```
+
+#### Step 2: Choose What to Do
+You have three options:
+
+**Option A: Add Missing Translations**
+```bash
+# Edit the missing translations file for your language
+notepad _missing_translations_<locale>.json
+```
+
+**Option B: Fix Existing Translations**
+```bash
+# Edit the main translation file
+notepad strings_<locale>.i18n.json
+```
+
+**Option C: Add a New Language**
+```bash
+# 1. Find your locale code: https://saimana.com/list-of-country-locale-code/
+# 2. Create new files:
+#    - strings_<locale>.i18n.json
+#    - _missing_translations_<locale>.json
+# 3. Add the locale to lib/i18n.dart
+```
+
+#### Step 3: Translate the Strings
+Here's an example of a translation file:
+
+```json
+{
+  "locale": "Français",
+  "appName": "LocalSend",
+  "general": {
+    "accept": "Accepter",
+    "cancel": "Annuler",
+    "confirm": "Confirmer"
   }
 }
 ```
 
-### Bump Flutter
+**⚠️ Important Notes:**
+- Fields starting with `@` are comments, **don't translate them**
+- Use `"@:general.accept"` to reference other translations
+- Test your translations (see Step 4)
 
-Suppose we want to update flutter to `3.7.8` (see https://github.com/localsend/localsend/commit/7b95a7a5600db2742a9e05b956d0415d871239d5):
-
-1. Update flutter from fvm: `fvm use 3.7.8`
-2. Update flutter from submodule:
-   1. `git submodule update --init`
-   2. `cd submodules/flutter`
-   3. `git fetch`
-   4. `git checkout 3.7.8`
-   5. `cd ../..`
-   6. `git add submodules/flutter`
-3. Update flutter constraints:
-   1. In CI: `.github/workflows/ci.yml`
-   2. In pubspec: `pubspec.yaml`
-
-### Release
-
-Make sure to set up the self-hosted runner to compile arm64 linux binaries.
-
-To set up the runner, follow the following instructions:
-
-Install Flutter
-
+#### Step 4: Test Your Translations
 ```bash
-sudo apt install git
-git clone https://github.com/flutter/flutter.git $HOME/flutter
-nano $HOME/.bashrc
+cd app
+
+# Update translations
+fvm flutter pub run slang
+
+# Run the app
+fvm flutter run
+
+# Switch to your language in Settings to verify
 ```
 
-Add the following to the end of the file:
-
+#### Step 5: Submit Your Changes
 ```bash
-export PATH="$PATH:$HOME/flutter/bin"
+git add .
+git commit -m "feat(i18n): add French translations"
+git push origin main
 ```
 
-Restart the terminal.
+Then create a Pull Request!
 
+---
+
+## 📝 Improving Documentation
+
+Good documentation helps everyone! Here's how you can help:
+
+### What to Improve
+- ✅ Fix typos and grammar errors
+- ✅ Add missing information to README.md
+- ✅ Improve code comments
+- ✅ Write tutorials or guides
+- ✅ Add examples to CONTRIBUTING.md (this file!)
+
+### How to Contribute
+
+#### 1️⃣ Identify What to Improve
+- Read through the docs
+- Note any unclear sections
+- Check for outdated information
+
+#### 2️⃣ Make Your Changes
 ```bash
-flutter doctor
+# Edit the file(s)
+notepad README.md
+notepad CONTRIBUTING.md
+
+# Or use a Markdown editor for better experience
 ```
 
-Next, follow the instructions to set up the GitHub runner.
+#### 3️⃣ Preview Your Changes (Optional but Recommended)
+Use a Markdown previewer:
+- **VS Code**: Right-click → "Open Preview"
+- **Online**: https://stackedit.io/
+- **命令行**: `grip README.md` (requires `pip install grip`)
 
-Start the "Release Draft" workflow from the "Actions" tab: https://github.com/localsend/localsend/actions/workflows/release.yml
+#### 4️⃣ Commit & Push
+```bash
+git add .
+git commit -m "docs: improve installation instructions in README"
+git push origin main
+```
 
-Finally, compile binaries not yet supported by the pipeline.
+#### 5️⃣ Create a Pull Request
+- Describe what you improved and why
+- Add screenshots if applicable
+
+---
+
+## 🐛 Bug Reports & Feature Requests
+
+### Before You Report...
+
+**🔍 Search existing issues first!** Your issue might already be reported.
+
+→ Go to https://github.com/localsend/localsend/issues
+
+### Reporting a Bug
+
+**Use the Bug Report Template** when creating a new issue.
+
+**Include:**
+- ✅ **Steps to reproduce** (be specific!)
+- ✅ **Expected behavior**
+- ✅ **Actual behavior**
+- ✅ **Screenshots** (if applicable)
+- ✅ **Environment** (OS, app version, device model)
+- ✅ **Logs** (if available)
+
+**Example Bug Report:**
+```markdown
+## Bug: App crashes when selecting large files
+
+### Steps to Reproduce
+1. Open LocalSend
+2. Click "Send"
+3. Select a 5GB file
+4. Click "Send"
+
+### Expected Behavior
+File should start transferring
+
+### Actual Behavior
+App crashes immediately
+
+### Environment
+- OS: Windows 11
+- App Version: 1.15.0
+- Device: Dell XPS 13
+
+### Logs
+[Attach crash logs if available]
+```
+
+### Requesting a Feature
+
+**Use the Feature Request Template.**
+
+**Include:**
+- ✅ **Clear description** of the feature
+- ✅ **Use case** (why is it needed?)
+- ✅ **Mockups/screenshots** (if applicable)
+- ✅ **Alternatives considered**
+
+---
+
+## 📦 Distribution
+
+Help spread LocalSend to more platforms!
+
+### Current Status
+
+We're looking for help with:
+- ❌ Traditional Linux distributions (Debian, Fedora, Arch, etc.)
+- ❌ More package managers
+- ❌ Your idea here!
+
+### How to Help
+
+#### 1️⃣ Package for a New Platform
+Example: Packaging for Debian/Ubuntu
+
+```bash
+# 1. Create a .deb package
+# 2. Test the package
+# 3. Submit to the official repo or create a PPA
+# 4. Update this CONTRIBUTING.md with instructions
+```
+
+#### 2️⃣ Update This Document
+Once you've successfully packaged LocalSend, please update the [Distribution](#distribution) section above with:
+- ✅ Platform name
+- ✅ Installation command
+- ✅ Maintainer info
+- ✅ Link to package repository
+
+#### 3️⃣ Create an Issue
+If you're working on a new platform, create an issue to let others know:
+```
+Title: Package LocalSend for Debian
+Description: I'm working on creating a .deb package for Debian/Ubuntu...
+```
+
+---
+
+## ✅ Contribution Guidelines
+
+To ensure a smooth review process, please follow these guidelines:
+
+### 📝 Commit Messages
+
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```
+<type>(<scope>): <subject>
+
+[optional body]
+
+[optional footer]
+```
+
+**Examples:**
+```bash
+feat: add dark mode support
+fix(i18n): correct Spanish translation for 'cancel'
+docs: update README with troubleshooting section
+chore: upgrade dependencies to latest versions
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+### 🧪 Code Quality
+
+- ✅ **Follow the [Dart Style Guide](https://dart.dev/guides/language/effective-dart/style)**
+- ✅ **Run the formatter**: `fvm flutter format .`
+- ✅ **Run the analyzer**: `fvm flutter analyze`
+- ✅ **Write tests** for new features and bug fixes
+- ✅ **Keep commits focused** (one logical change per commit)
+
+### 📦 Pull Request Guidelines
+
+- ✅ **Target the `main` branch**
+- ✅ **Fill out the PR template** completely
+- ✅ **Link related issues** (`Closes #123`, `Fixes #456`)
+- ✅ **Add screenshots** for UI changes
+- ✅ **Keep PRs focused** (don't mix unrelated changes)
+- ✅ **Be responsive** to review feedback
+
+---
+
+## ❓ Troubleshooting
+
+### Common Issues
+
+#### "Flutter version mismatch"
+**Problem:** The project requires a specific Flutter version.
+
+**Solution:**
+```bash
+# Use FVM to install the correct version
+fvm install
+fvm use
+
+# Verify
+fvm flutter --version
+```
+
+#### "Build failed with exception"
+**Problem:** Gradle/Maven build failure.
+
+**Solution:**
+```bash
+# Clean and rebuild
+cd app
+fvm flutter clean
+fvm flutter pub get
+fvm flutter run
+```
+
+#### "Translation not showing up"
+**Problem:** You added translations but they don't appear in the app.
+
+**Solution:**
+```bash
+cd app
+
+# Regenerate translations
+fvm flutter pub run slang
+
+# Restart the app (hot reload won't work)
+# Stop the app (q)
+fvm flutter run
+```
+
+#### "Git push fails with authentication error"
+**Problem:** GitHub requires a Personal Access Token (PAT).
+
+**Solution:**
+1. Create a PAT: https://github.com/settings/tokens
+2. Use the token as your password when pushing
+3. Or use the GitHub CLI: `gh auth login`
+
+#### "App not discovering devices"
+**Problem:** LocalSend can't find other devices.
+
+**Solution:**
+1. Ensure all devices are on the same Wi-Fi network
+2. Disable AP isolation on your router
+3. Allow port 53317 in your firewall
+4. On Windows, set network to "Private"
+5. On macOS/iOS, enable "Local Network" permission
+
+---
+
+## 🔒 Security Issues
+
+**⚠️ DO NOT report security issues publicly!**
+
+If you discover a security vulnerability:
+1. ✅ **Email us directly**: [support@localsend.org](mailto:support@localsend.org)
+2. ✅ **Do NOT create a public issue**
+3. ✅ **Include detailed information** about the vulnerability
+4. ✅ **Wait for our response** (we'll acknowledge within 48 hours)
+
+We'll work with you to fix the issue before making it public.
+
+---
+
+## 🎉 Thank You!
+
+Every contribution, no matter how small, makes LocalSend better for everyone. Thank you for being part of our community! 🚀
+
+**Questions?** Feel free to:
+- 💬 Join our [Discord](https://discord.gg/GSRWmQNP87)
+- 📧 Email us at [support@localsend.org](mailto:support@localsend.org)
+- 🐛 Open an issue (for non-security bugs)
+
+---
+
+**Happy Contributing!** 🎊
