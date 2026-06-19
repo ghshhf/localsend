@@ -1,0 +1,149 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Version tag (e.g., v1.17.0-prp1)'
+        required: false
+        default: 'v1.17.0-prp'
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FLUTTER_VERSION: "3.35.6"
+  APK_BUILD_DIR: "/tmp/build"
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Remove proprietary dependencies
+        run: sh scripts/remove_proprietary_dependencies.sh
+
+      - name: Copy to build dir
+        run: |
+          mkdir -p $APK_BUILD_DIR
+          cp -r . $APK_BUILD_DIR
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Dependencies
+        working-directory: ${{ env.APK_BUILD_DIR }}/app
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: ${{ env.APK_BUILD_DIR }}/app
+        run: flutter build apk --split-per-abi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: apk-result
+          path: |
+            ${{ env.APK_BUILD_DIR }}/app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            ${{ env.APK_BUILD_DIR }}/app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            ${{ env.APK_BUILD_DIR }}/app/build/app/outputs/flutter-apk/app-x86_64-release.apk
+
+  build-windows:
+    name: Build Windows MSIX
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+
+      - name: Dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build Windows
+        working-directory: app
+        run: flutter build windows --release
+
+      - name: Build MSIX
+        shell: pwsh
+        working-directory: app
+        run: dart run msix:create
+
+      - name: Upload MSIX
+        uses: actions/upload-artifact@v6
+        with:
+          name: msix-result
+          path: app/build/windows/runner/Release/*.msix
+
+  build-linux:
+    name: Build Linux AppImage
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libgtk-3-dev ninja-build libayatana-appindicator3-dev libfuse2
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+
+      - name: Dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build generated files
+        working-directory: app
+        run: dart run build_runner build -d
+
+      - name: Build Linux
+        working-directory: app
+        run: flutter build linux
+
+      - name: Prepare AppDir
+        working-directory: app
+        run: |
+          mkdir -p AppDir
+          cp -r build/linux/x64/release/bundle/* AppDir/
+          mkdir -p AppDir/usr/share/icons/hicolor/32x32/apps
+          cp assets/img/logo-32.png AppDir/usr/share/icons/hicolor/32x32/apps/localsend.png
+          mkdir -p AppDir/usr/share/icons/hicolor/128x128/apps
+          cp assets/img/logo-128.png AppDir/usr/share/icons/hicolor/128x128/apps/localsend.png
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          cp assets/img/logo-256.png AppDir/usr/share/icons/hicolor/256x256/apps/localsend.png
+
+      - name: Build AppImage
+        uses: AppImageCrafters/build-appimage@57c3bc6963f870ce3be103117de5b5e33ffbaeb6
+        with:
+          recipe: ./app/AppImageBuilder.yml
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v6
+        with:
+          name: appimage-result
+          path: ./app/*.AppImage
