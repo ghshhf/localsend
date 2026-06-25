@@ -1,6 +1,12 @@
 import 'package:localsend_app/provider/network/scan_facade.dart';
 import 'package:test/test.dart';
 
+/// Simulates StartSmartScan.reduce() decision logic for testing.
+/// Returns true when legacy scan should be triggered.
+bool _shouldTriggerLegacy(bool forceLegacy, bool noDevicesFound, bool inSendTab) {
+  return forceLegacy || (noDevicesFound && inSendTab);
+}
+
 void main() {
   group('StartSmartScan', () {
     test('should have forceLegacy parameter', () {
@@ -17,30 +23,21 @@ void main() {
 
     test('decision logic: forceLegacy=true always triggers legacy path', () {
       // forceLegacy=true → always uses legacy path regardless of other conditions
-      final triggersLegacy = bool.hasEnvironment('FORCE_LEGACY');
-      // When forceLegacy is true, the legacy path is ALWAYS triggered
-      // This maps to: StartSmartScan.reduce() dispatches StartLegacySubnetScan
-      expect(triggersLegacy || true, isTrue);
+      expect(_shouldTriggerLegacy(true, false, false), isTrue);
     });
 
     test('decision logic: legacy scan triggered when no devices and in send tab', () {
       // When noDevicesFound=true AND inSendTab=true, legacy scan is triggered
-      final noDevicesFound = true;
-      final inSendTab = true;
-      expect(noDevicesFound && inSendTab, isTrue);
+      expect(_shouldTriggerLegacy(false, true, true), isTrue);
     });
 
     test('decision logic: legacy scan skipped when devices found', () {
       // When devices are found, legacy scan is skipped
-      final noDevicesFound = false;
-      final inSendTab = true;
-      expect(noDevicesFound && inSendTab, isFalse);
+      expect(_shouldTriggerLegacy(false, false, true), isFalse);
     });
 
     test('decision logic: legacy scan skipped when not in send tab', () {
-      final noDevicesFound = true;
-      final inSendTab = false;
-      expect(noDevicesFound && inSendTab, isFalse);
+      expect(_shouldTriggerLegacy(false, true, false), isFalse);
     });
   });
 

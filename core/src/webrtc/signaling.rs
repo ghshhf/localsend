@@ -1,6 +1,7 @@
 use crate::model::discovery::DeviceType;
 use crate::util::base64;
 use anyhow::Result;
+use futures_util::SinkExt;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialEq;
