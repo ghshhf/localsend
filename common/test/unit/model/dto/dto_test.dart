@@ -1,3 +1,4 @@
+import 'package:common/model/device.dart';
 import 'package:common/model/dto/file_dto.dart';
 import 'package:common/model/dto/info_dto.dart';
 import 'package:common/model/dto/multicast_dto.dart';
@@ -42,7 +43,7 @@ void main() {
     });
 
     test('should serialize to JSON', () {
-      const dto = InfoDto(
+      final dto = InfoDto(
         alias: 'Serialize Test',
         version: '2.0',
         deviceModel: 'Test Model',
