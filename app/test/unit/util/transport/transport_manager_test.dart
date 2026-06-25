@@ -37,7 +37,9 @@ void main() {
       expect(usbTransport!.type, TransportType.usbTethering);
 
       final localTransport = manager.getTransport(TransportType.localNetwork);
-      expect(localTransport, isNull); // Not yet implemented
+      expect(localTransport, isNotNull);
+      expect(localTransport!.type, TransportType.localNetwork);
+      expect(localTransport.isAvailable, isFalse); // stub, always false
     });
 
     test('startHost should set active transport', () async {
