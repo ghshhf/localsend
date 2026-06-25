@@ -38,4 +38,3 @@ linter:
     sort_pub_dependencies: true
     always_use_package_imports: true
     directives_ordering: false
-    unwrapped_futures: false
