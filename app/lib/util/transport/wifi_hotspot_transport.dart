@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'dart:io';
+
+import 'wifi_hotspot_transport_web.dart'
+    if (dart.library.io) 'wifi_hotspot_transport_io.dart';
 
 import 'package:flutter/services.dart';
 import 'package:localsend_app/util/transport/transport_interface.dart';
@@ -42,8 +44,7 @@ class WifiHotspotTransport implements TransportInterface {
   @override
   bool get isAvailable {
     try {
-      return Platform
-          .isAndroid; // Currently only Android supports hotspot relay
+      return isAndroidPlatform; // Currently only Android supports hotspot relay
     } catch (e) {
       _logger.warning('Platform check failed in isAvailable: $e');
       return false;

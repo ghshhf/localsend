@@ -6,6 +6,14 @@ class SecurityScopedResourceManager {
     
     private init() {}
     
+    deinit {
+        cleanupAll()
+    }
+    
+    /// Start accessing a security-scoped resource from a bookmark.
+    /// Returns the resolved URL, or nil if resolution or access fails.
+    /// - Important: The caller must call `stopAccessing(url:)` when the resource is no longer needed
+    ///   to avoid leaking kernel file descriptors. See: https://developer.apple.com/documentation/foundation/url/1779698-startaccessingsecurityscopedreso
     func startAccessing(bookmark: Data) -> URL? {
         do {
             var isStale = false
@@ -24,11 +32,22 @@ class SecurityScopedResourceManager {
         }
     }
     
+    /// Stop accessing a security-scoped resource and release its kernel reference.
+    /// Should be called when the file is no longer needed.
+    /// - Parameter url: The URL to stop accessing.
     func stopAccessing(url: URL) {
-        // TODO: stop accessing when file is not needed anymore! See: https://developer.apple.com/documentation/foundation/url/1779698-startaccessingsecurityscopedreso#:~:text=resource%20in%20question.-,Warning,-If%20you%20fail
         if openResources.keys.contains(url) {
             url.stopAccessingSecurityScopedResource()
             openResources.removeValue(forKey: url)
         }
+    }
+    
+    /// Stop accessing all currently open security-scoped resources.
+    /// Called automatically on `deinit` to prevent kernel FD leaks.
+    func cleanupAll() {
+        for (url, _) in openResources {
+            url.stopAccessingSecurityScopedResource()
+        }
+        openResources.removeAll()
     }
 }

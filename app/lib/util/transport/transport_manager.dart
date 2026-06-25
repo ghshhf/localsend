@@ -1,8 +1,9 @@
 import 'dart:async';
 
+import 'package:localsend_app/util/transport/local_network_transport.dart';
 import 'package:localsend_app/util/transport/transport_interface.dart';
-import 'package:localsend_app/util/transport/wifi_hotspot_transport.dart';
 import 'package:localsend_app/util/transport/usb_tethering_transport.dart';
+import 'package:localsend_app/util/transport/wifi_hotspot_transport.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('TransportManager');
@@ -18,6 +19,7 @@ final _logger = Logger('TransportManager');
 class TransportManager {
   final WifiHotspotTransport _wifiTransport = WifiHotspotTransport();
   final UsbTetheringTransport _usbTransport = UsbTetheringTransport();
+  final LocalNetworkTransport _localNetworkTransport = LocalNetworkTransport();
   TransportInterface? _activeTransport;
   bool _initialized = false;
 
@@ -28,7 +30,7 @@ class TransportManager {
       StreamController<TransportState>.broadcast();
 
   /// All available transports.
-  List<TransportInterface> get transports => [_wifiTransport, _usbTransport];
+  List<TransportInterface> get transports => [_wifiTransport, _usbTransport, _localNetworkTransport];
 
   /// The currently active transport, if any.
   TransportInterface? get activeTransport => _activeTransport;
@@ -69,6 +71,15 @@ class TransportManager {
         }
       });
 
+      // Wire up local network transport events (stub, not yet implemented)
+      _localNetworkTransport.onPeerDiscovered
+          .listen((peer) => _peerController.add(peer));
+      _localNetworkTransport.onStateChanged.listen((state) {
+        if (_activeTransport == _localNetworkTransport) {
+          _stateController.add(state);
+        }
+      });
+
       _initialized = true;
       _logger.info('Transport manager initialized');
     } catch (e, st) {
@@ -85,7 +96,7 @@ class TransportManager {
       case TransportType.usbTethering:
         return _usbTransport;
       case TransportType.localNetwork:
-        return null; // Not yet implemented
+        return _localNetworkTransport;
     }
   }
 
@@ -160,6 +171,7 @@ class TransportManager {
     final types = <TransportType>[];
     if (_wifiTransport.isAvailable) types.add(TransportType.wifiHotspot);
     if (_usbTransport.isAvailable) types.add(TransportType.usbTethering);
+    if (_localNetworkTransport.isAvailable) types.add(TransportType.localNetwork);
     return types;
   }
 
@@ -169,6 +181,7 @@ class TransportManager {
     await stopActive();
     await _wifiTransport.dispose();
     await _usbTransport.dispose();
+    await _localNetworkTransport.dispose();
     await _peerController.close();
     await _stateController.close();
     _initialized = false;

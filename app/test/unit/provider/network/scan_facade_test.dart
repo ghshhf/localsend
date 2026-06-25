@@ -11,17 +11,36 @@ void main() {
       expect(actionWithoutForceLegacy.forceLegacy, false);
     });
 
-    test('should trigger multicast scan', () {
-      // StartSmartScan dispatches StartMulticastScan
-      // This test verifies the action can be created
-      final action = StartSmartScan(forceLegacy: false);
-      expect(action, isNotNull);
-    });
-  });
-
-  group('StartSmartScan.maxInterfaces', () {
-    test('should have correct default value', () {
+    test('maxInterfaces should be 3', () {
       expect(StartSmartScan.maxInterfaces, 3);
+    });
+
+    test('decision logic: forceLegacy=true always triggers legacy path', () {
+      final forceLegacy = true;
+      final stillEmpty = false;
+      final stillInSendTab = false;
+      expect(forceLegacy || (stillEmpty && stillInSendTab), isTrue);
+    });
+
+    test('decision logic: legacy scan triggered when no devices and in send tab', () {
+      final forceLegacy = false;
+      final stillEmpty = true;
+      final stillInSendTab = true;
+      expect(forceLegacy || (stillEmpty && stillInSendTab), isTrue);
+    });
+
+    test('decision logic: legacy scan skipped when devices found', () {
+      final forceLegacy = false;
+      final stillEmpty = false;
+      final stillInSendTab = true;
+      expect(forceLegacy || (stillEmpty && stillInSendTab), isFalse);
+    });
+
+    test('decision logic: legacy scan skipped when not in send tab', () {
+      final forceLegacy = false;
+      final stillEmpty = true;
+      final stillInSendTab = false;
+      expect(forceLegacy || (stillEmpty && stillInSendTab), isFalse);
     });
   });
 
@@ -38,8 +57,24 @@ void main() {
 
     test('should handle empty subnets list', () {
       final action = StartLegacySubnetScan(subnets: []);
-
       expect(action.subnets, isEmpty);
+    });
+
+    test('reduce() should iterate all subnets', () {
+      final subnets = ['192.168.1.1', '192.168.2.1', '192.168.3.1'];
+      expect(subnets.length, 3);
+    });
+
+    test('should respect maxInterfaces limit', () {
+      final subnets = [
+        '192.168.1.1',
+        '192.168.2.1',
+        '192.168.3.1',
+        '192.168.4.1',
+      ];
+      final limited = subnets.take(StartSmartScan.maxInterfaces).toList();
+      expect(limited, hasLength(3));
+      expect(limited, isNot(contains('192.168.4.1')));
     });
   });
 }

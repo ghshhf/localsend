@@ -54,12 +54,16 @@ void main() {
       await expectLater(t.dispose(), completes);
     });
 
-    // Note: Testing isAvailable with Platform.isAndroid requires platform-specific
-    // test setup or mocking. On non-Android test environments, this may return false.
-    // For comprehensive isAvailable testing, consider integration tests with
-    // platform-specific test setup.
-    test('isAvailable getter should not throw', () {
-      expect(() => transport.isAvailable, returnsNormally);
+    test('isAvailable getter should not throw and return bool', () {
+      final result = transport.isAvailable;
+      expect(result, isA<bool>());
+      expect(result, isFalse); // Non-Android platform in test environment
+    });
+
+    test('isAvailable returns false on non-Android platforms', () {
+      // On macOS/Windows/Linux test environments, isAvailable should be false
+      // because hotspot relay is only supported on Android
+      expect(transport.isAvailable, isFalse);
     });
   });
 }
