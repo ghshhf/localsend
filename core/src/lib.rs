@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(unused_imports)]
 
 #[cfg(feature = "crypto")]
 pub mod crypto;

@@ -1,9 +1,12 @@
 use crate::model::discovery::DeviceType;
+use crate::util::base64;
 use anyhow::Result;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 #[cfg(feature = "webrtc-signaling")]
 use tokio_tungstenite::connect_async;
@@ -183,6 +186,7 @@ pub struct SignalingConnection {
 
 #[cfg(feature = "webrtc-signaling")]
 impl SignalingConnection {
+    #[allow(deprecated)]
     pub async fn connect<S: Into<String>>(
         uri: S,
         info: &ClientInfoWithoutId,
