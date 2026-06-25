@@ -75,14 +75,14 @@ class _SetupSignalingConnection extends AsyncGlobalAction {
   static const String _kPrivateKey = 'webrtc_private_key';
   static const String _kPublicKey = 'webrtc_public_key';
 
-  Future<rust.KeyPair> _loadOrGenerateKeyPair() async {
+  Future<crypto.KeyPair> _loadOrGenerateKeyPair() async {
     final prefs = await SharedPreferences.getInstance();
     final storedPrivate = prefs.getString(_kPrivateKey);
     final storedPublic = prefs.getString(_kPublicKey);
 
     if (storedPrivate != null && storedPublic != null) {
       debugPrint('[Signaling] Loaded persistent key pair');
-      return rust.KeyPair(privateKey: storedPrivate, publicKey: storedPublic);
+      return crypto.KeyPair(privateKey: storedPrivate, publicKey: storedPublic);
     }
 
     debugPrint('[Signaling] Generating new key pair');

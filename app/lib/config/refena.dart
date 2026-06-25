@@ -30,7 +30,11 @@ bool _exclude(RefenaEvent event) {
         event.notifier is LocalIpService ||
         event.notifier is ProgressNotifier;
   }
-  if (event is ActionDispatchedEvent || event is ActionFinishedEvent) {
+  if (event is ActionDispatchedEvent) {
+    final actionType = event.action.runtimeType.toString();
+    return actionType == '_FetchLocalIpAction';
+  }
+  if (event is ActionFinishedEvent) {
     final actionType = event.action.runtimeType.toString();
     return actionType == '_FetchLocalIpAction';
   }

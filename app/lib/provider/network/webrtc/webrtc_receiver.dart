@@ -2,18 +2,21 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:common/model/dto/file_dto.dart' as dart_model;
+import 'package:common/model/file_status.dart';
 import 'package:common/model/session_status.dart';
 import 'package:common/model/stored_security_context.dart';
 import 'package:dart_mappable/dart_mappable.dart';
 import 'package:localsend_app/model/persistence/favorite_device.dart';
 import 'package:localsend_app/model/state/server/receive_session_state.dart';
+import 'package:localsend_app/model/state/server/receiving_file.dart';
 import 'package:localsend_app/model/state/settings_state.dart';
 import 'package:localsend_app/pages/receive_page.dart';
+import 'package:localsend_app/provider/favorites_provider.dart';
 import 'package:localsend_app/provider/network/webrtc/signaling_provider.dart';
 import 'package:localsend_app/provider/settings_provider.dart';
-import 'package:localsend_app/provider/favorites_provider.dart';
 import 'package:localsend_app/rust/api/model.dart';
 import 'package:localsend_app/rust/api/webrtc.dart';
+import 'package:localsend_app/util/native/platform_check.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
 import 'package:path_provider/path_provider.dart';
@@ -44,6 +47,8 @@ class WebRTCReceiveService extends ReduxNotifier<WebRTCReceiveState> {
   final LsSignalingConnection _connection;
   final WsServerSdpMessage _offer;
   final StoredSecurityContext _key;
+  final SettingsState _settings;
+  final List<FavoriteDevice> _favorites;
 
   WebRTCReceiveService({
     required String signalingServer,
@@ -57,6 +62,8 @@ class WebRTCReceiveService extends ReduxNotifier<WebRTCReceiveState> {
        _stunServers = stunServers,
        _connection = connection,
        _offer = offer,
+       _settings = settings,
+       _favorites = favorites,
        _key = key;
 
   @override
@@ -148,8 +155,8 @@ class _InitSessionState extends AsyncReduxAction<WebRTCReceiveService, WebRTCRec
 
   @override
   Future<WebRTCReceiveState> reduce() async {
-    final settings = ref.read(settingsProvider);
-    final favorites = ref.read(favoritesProvider);
+    final settings = notifier._settings;
+    final favorites = notifier._favorites;
     final destinationDir = settings.destination ?? await _getDefaultDestinationDirectory();
     final cacheDir = await _getCacheDirectory();
     final streamController = StreamController<Map<String, String>?>();
