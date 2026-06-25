@@ -44,12 +44,12 @@ jobs:
         working-directory: app
         run: flutter build apk --debug
 
-      - name: Upload APK
+      - name: Upload APK (Artifact)
         uses: actions/upload-artifact@v6
         with:
           name: localsend-android
           path: app/build/app/outputs/flutter-apk/app-debug.apk
-          retention-days: 15
+          retention-days: 1
 
   build-windows:
     name: Windows MSIX
@@ -77,12 +77,12 @@ jobs:
         working-directory: app
         run: dart run msix:create
 
-      - name: Upload Windows
+      - name: Upload Windows (Artifact)
         uses: actions/upload-artifact@v6
         with:
           name: localsend-windows
           path: app/build/windows/runner/Release/*.msix
-          retention-days: 15
+          retention-days: 1
 
   build-linux:
     name: Linux AppImage
@@ -136,9 +136,65 @@ jobs:
         with:
           recipe: ./app/AppImageBuilder.yml
 
-      - name: Upload Linux
+      - name: Upload Linux (Artifact)
         uses: actions/upload-artifact@v6
         with:
           name: localsend-linux
           path: ./app/*.AppImage
-          retention-days: 15
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: [build-android, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6
+        with:
+          merge-multiple: true
+          path: release-files
+
+      - name: Generate version tag
+        id: version
+        run: |
+          echo "tag=continuous-$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+          echo "name=Continuous Build $(date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
+
+      - name: List release files
+        run: ls -lh release-files/
+
+      - name: Remove old continuous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete continuous --yes --repo ${{ github.repository }} 2>/dev/null || true
+
+      - name: Delete tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin --delete refs/tags/continuous 2>/dev/null || true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: LocalSend Latest Build
+          body: |
+            🚀 Auto-built from latest `main` branch
+
+            ## Platforms
+
+            | Platform | File | Install |
+            |----------|------|---------|
+            | Android  | `app-debug.apk` | Download → enable "Unknown sources" → install |
+            | Windows  | `*.msix` | Download → double click → install |
+            | Linux    | `*.AppImage` | Download → `chmod +x` → run |
+
+            > ⚠️ These are debug/development builds. For production, use the official release.
+          files: release-files/*
+          make_latest: true
+          generate_release_notes: false
