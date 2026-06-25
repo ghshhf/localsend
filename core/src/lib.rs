@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[cfg(feature = "crypto")]
 pub mod crypto;
 #[cfg(feature = "http")]
