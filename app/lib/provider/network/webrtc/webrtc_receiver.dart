@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:common/model/dto/file_dto.dart' as dart_model;
 import 'package:common/model/session_status.dart';
 import 'package:common/model/stored_security_context.dart';
@@ -7,10 +10,14 @@ import 'package:localsend_app/model/state/server/receive_session_state.dart';
 import 'package:localsend_app/model/state/settings_state.dart';
 import 'package:localsend_app/pages/receive_page.dart';
 import 'package:localsend_app/provider/network/webrtc/signaling_provider.dart';
+import 'package:localsend_app/provider/settings_provider.dart';
+import 'package:localsend_app/provider/favorites_provider.dart';
 import 'package:localsend_app/rust/api/model.dart';
 import 'package:localsend_app/rust/api/webrtc.dart';
 import 'package:refena_flutter/refena_flutter.dart';
 import 'package:routerino/routerino.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 part 'webrtc_receiver.mapper.dart';
 
@@ -134,42 +141,61 @@ class _AcceptOfferAction extends AsyncReduxAction<WebRTCReceiveService, WebRTCRe
   }
 }
 
-class _InitSessionState extends ReduxAction<WebRTCReceiveService, WebRTCReceiveState> {
+class _InitSessionState extends AsyncReduxAction<WebRTCReceiveService, WebRTCReceiveState> {
   final List<dart_model.FileDto> files;
 
   _InitSessionState(this.files);
 
   @override
-  WebRTCReceiveState reduce() {
-    return state;
-    // TODO
-    // return state.copyWith(
-    //   sessionState: ReceiveSessionState(
-    //     sessionId: state.offer.sessionId,
-    //     status: SessionStatus.waiting,
-    //     sender: state.offer.peer.toDevice(notifier._signalingServer),
-    //     senderAlias: notifier._favorites.firstWhereOrNull((e) => e.fingerprint == notifier.info.fingerprint)?.alias ?? dto.info.alias,
-    //     files: {
-    //       for (final file in files)
-    //         file.id: ReceivingFile(
-    //           file: file,
-    //           status: FileStatus.queue,
-    //           token: null,
-    //           desiredName: null,
-    //           path: null,
-    //           savedToGallery: false,
-    //           errorMessage: null,
-    //         ),
-    //     },
-    //     startTime: null,
-    //     endTime: null,
-    //     destinationDirectory: destinationDir,
-    //     cacheDirectory: cacheDir,
-    //     saveToGallery: checkPlatformWithGallery() && settings.saveToGallery && dto.files.values.every((f) => !f.fileName.contains('/')),
-    //     createdDirectories: {},
-    //     responseHandler: streamController,
-    //   ),
-    // );
+  Future<WebRTCReceiveState> reduce() async {
+    final settings = ref.read(settingsProvider);
+    final favorites = ref.read(favoritesProvider);
+    final destinationDir = settings.destination ?? await _getDefaultDestinationDirectory();
+    final cacheDir = await _getCacheDirectory();
+    final streamController = StreamController<Map<String, String>?>();
+
+    return state.copyWith(
+      sessionState: ReceiveSessionState(
+        sessionId: state.offer.sessionId,
+        status: SessionStatus.waiting,
+        sender: state.offer.peer.toDevice(notifier._signalingServer),
+        senderAlias: favorites.firstWhereOrNull((e) => e.fingerprint == state.offer.peer.token)?.alias ?? state.offer.peer.alias,
+        files: {
+          for (final file in files)
+            file.id: ReceivingFile(
+              file: file,
+              status: FileStatus.queue,
+              token: null,
+              desiredName: null,
+              path: null,
+              savedToGallery: false,
+              errorMessage: null,
+            ),
+        },
+        startTime: null,
+        endTime: null,
+        destinationDirectory: destinationDir,
+        cacheDirectory: cacheDir,
+        saveToGallery: checkPlatformWithGallery() && settings.saveToGallery && files.every((f) => !f.fileName.contains('/')),
+        createdDirectories: {},
+        responseHandler: streamController,
+      ),
+    );
+  }
+
+  Future<String> _getDefaultDestinationDirectory() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final dir = await getApplicationDocumentsDirectory();
+      return dir.path;
+    } else {
+      final dir = await getDownloadsDirectory();
+      return dir?.path ?? (await getApplicationDocumentsDirectory()).path;
+    }
+  }
+
+  Future<String> _getCacheDirectory() async {
+    final dir = await getTemporaryDirectory();
+    return dir.path;
   }
 }
 

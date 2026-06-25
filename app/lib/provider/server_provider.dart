@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Server provider - resolves Google Drive path conflict on Windows 11
 class ServerProvider {
@@ -11,9 +12,37 @@ class ServerProvider {
   factory ServerProvider() => _instance;
   ServerProvider._internal();
 
+  static const String _kCustomSaveDirectoryKey = 'custom_save_directory';
+
+  SharedPreferences? _prefs;
+
+  Future<SharedPreferences> _getPrefs() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    return _prefs!;
+  }
+
   /// Get a safe storage path that avoids cloud sync directories
   Future<String> getSafeStoragePath() async {
     debugPrint('[ServerProvider] Getting safe storage path');
+
+    // Check custom save directory first
+    final customDir = await getCustomSaveDirectory();
+    if (customDir != null) {
+      final dir = Directory(customDir);
+      if (await dir.exists()) {
+        try {
+          final testFile = File(p.join(customDir, '.localsend_test'));
+          await testFile.writeAsString('test');
+          await testFile.delete();
+          debugPrint('[ServerProvider] Using custom save path: $customDir');
+          return customDir;
+        } catch (e) {
+          debugPrint('[ServerProvider] Custom save path unavailable: $customDir, error: $e');
+        }
+      } else {
+        debugPrint('[ServerProvider] Custom save path does not exist: $customDir');
+      }
+    }
 
     final possibleDirs = await _getPossibleStorageDirs();
 
@@ -225,10 +254,31 @@ class ServerProvider {
     return path;
   }
 
+  /// Get custom save directory from SharedPreferences
+  Future<String?> getCustomSaveDirectory() async {
+    try {
+      final prefs = await _getPrefs();
+      final path = prefs.getString(_kCustomSaveDirectoryKey);
+      debugPrint('[ServerProvider] Loaded custom save directory: $path');
+      return path;
+    } catch (e) {
+      debugPrint('[ServerProvider] Failed to load custom save directory: $e');
+      return null;
+    }
+  }
+
   /// Set custom save directory
   Future<void> setCustomSaveDirectory(String? path) async {
-    // Save to SharedPreferences
-    // Implement in actual project
-    debugPrint('[ServerProvider] Setting custom save directory: $path');
+    try {
+      final prefs = await _getPrefs();
+      if (path != null) {
+        await prefs.setString(_kCustomSaveDirectoryKey, path);
+      } else {
+        await prefs.remove(_kCustomSaveDirectoryKey);
+      }
+      debugPrint('[ServerProvider] Setting custom save directory: $path');
+    } catch (e) {
+      debugPrint('[ServerProvider] Failed to save custom save directory: $e');
+    }
   }
 }

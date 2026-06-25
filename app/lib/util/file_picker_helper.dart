@@ -5,6 +5,11 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 /// File picker helper - safely handles platform-specific permissions
 class FilePickerHelper {
@@ -218,15 +223,23 @@ class FilePickerHelper {
     return null;
   }
 
-  /// Get Android version info (simplified version)
+  /// Get Android version info using device_info_plus
   static Future<Map<String, dynamic>?> _getAndroidInfo() async {
     if (!Platform.isAndroid) return null;
 
-    // In the actual project, use device_info_plus package
-    // For now, return default value
-    return {
-      'sdkInt': 33, // assume Android 13
-    };
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      debugPrint('[FilePicker] Android SDK version: ${androidInfo.version.sdkInt}');
+      return {
+        'sdkInt': androidInfo.version.sdkInt,
+      };
+    } catch (e) {
+      debugPrint('[FilePicker] Failed to get Android info: $e, falling back to SDK 33');
+      return {
+        'sdkInt': 33, // fallback assumption
+      };
+    }
   }
 
   /// Show permission error dialog

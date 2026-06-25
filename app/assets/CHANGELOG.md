@@ -1,8 +1,17 @@
 ## unreleased
 
+## unreleased
+
 - feat(android): implement PRP (Peer Relay Protocol) for hotspot-based peer discovery when devices are not on the same LAN (@ghshhf)
 - feat(android): add PRP hotspot relay page with Host/Client modes for out-of-LAN file transfer (@ghshhf)
 - feat(android): PRP QR code sharing for easy hotspot connection setup (@ghshhf)
+- fix: multiple improvements and bug fixes
+  - Fix key persistence in WebRTC signaling (P0)
+  - Implement WebRTC session state initialization (P1)
+  - Implement setCustomSaveDirectory (P2)
+  - Fix Android SDK version detection (P3)
+  - Fix isIgnoreFile always returning false (P5)
+  - Add PRP page strings to i18n base file (P3)
 - feat(windows): add LocalSend to Windows Share Sheet (@chenxdust, https://github.com/localsend/localsend/pull/2555)
 - feat: enable starting text share via command line using `--text` or `-t` flags (@guilhermetiscoski, https://github.com/localsend/localsend/pull/2661)
 - feat(android): add quick settings tile for instant app launch (@Voltra, https://github.com/localsend/localsend/pull/2676)
