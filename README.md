@@ -43,6 +43,9 @@ This fork adds **PRP (Peer Relay Protocol)** — hotspot-based relay functionali
 | **Dart Analysis** | `refena.dart` type promotion, `signaling_provider.dart` `KeyPair` path, `webrtc_receiver.dart` missing types |
 | **Testing** | 132 tests passing. Added `send_provider`/`server_provider`/`isolate` tests |
 | **CI** | All 4 jobs (format / test / rust / packaging) verified green ✅ |
+| **Builds** | Auto-built APK / MSIX / AppImage on every push — [download from Actions] |
+
+[download from Actions]: https://github.com/ghshhf/localsend/actions/workflows/build_artifacts.yml
 
 ---
 
