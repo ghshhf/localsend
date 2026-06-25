@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'wifi_hotspot_transport_web.dart'
-    if (dart.library.io) 'wifi_hotspot_transport_io.dart';
+import 'package:localsend_app/util/transport/wifi_hotspot_transport_web.dart'
+    if (dart.library.io) 'package:localsend_app/util/transport/wifi_hotspot_transport_io.dart';
 
 import 'package:flutter/services.dart';
 import 'package:localsend_app/util/transport/transport_interface.dart';

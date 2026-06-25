@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:logging/logging.dart';
 
-import 'transport_interface.dart';
+import 'package:localsend_app/util/transport/transport_interface.dart';
 
 final _logger = Logger('LocalNetworkTransport');
 
