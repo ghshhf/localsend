@@ -113,7 +113,7 @@ class _AcceptOfferAction extends AsyncReduxAction<WebRTCReceiveService, WebRTCRe
 
     final files = await controller.listenFiles();
     final convertedFiles = files.map((e) => e.toFileDto()).toList();
-    dispatch(_InitSessionState(convertedFiles));
+    dispatchAsync(_InitSessionState(convertedFiles));
 
     final vm = ViewProvider((ref) {
       final state = ref.watch(notifier.provider as ReduxProvider<WebRTCReceiveService, WebRTCReceiveState>);
@@ -166,7 +166,10 @@ class _InitSessionState extends AsyncReduxAction<WebRTCReceiveService, WebRTCRec
         sessionId: state.offer.sessionId,
         status: SessionStatus.waiting,
         sender: state.offer.peer.toDevice(notifier._signalingServer),
-        senderAlias: favorites.firstWhereOrNull((e) => e.fingerprint == state.offer.peer.token)?.alias ?? state.offer.peer.alias,
+        senderAlias: (() {
+          final matched = favorites.where((e) => e.fingerprint == state.offer.peer.token);
+          return matched.isNotEmpty ? matched.first.alias : state.offer.peer.alias;
+        })(),
         files: {
           for (final file in files)
             file.id: ReceivingFile(
