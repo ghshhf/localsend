@@ -1,14 +1,10 @@
 use crate::model::discovery::DeviceType;
-use crate::util::base64;
 use anyhow::Result;
-use futures_util::stream::StreamExt;
-use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
-use tokio::time::Duration;
 #[cfg(feature = "webrtc-signaling")]
 use tokio_tungstenite::connect_async;
 #[cfg(feature = "webrtc-signaling")]
@@ -336,7 +332,9 @@ type AnswerCallback = Box<dyn FnOnce(WsServerSdpMessage) + Send + Sync>;
 pub struct ManagedSignalingConnection {
     /// The peer info received from the server of the client.
     pub client: ClientInfo,
+    #[allow(dead_code)]
     tx: mpsc::Sender<WsClientMessage>,
+    #[allow(dead_code)]
     on_answer: Arc<Mutex<HashMap<String, AnswerCallback>>>,
 }
 
@@ -370,6 +368,7 @@ impl ManagedSignalingConnection {
     }
 }
 
+#[allow(dead_code)]
 async fn send_update(tx: &mpsc::Sender<WsClientMessage>, info: ClientInfoWithoutId) -> Result<()> {
     tx.send(WsClientMessage::Update { info }).await?;
 
