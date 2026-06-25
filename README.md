@@ -1,11 +1,11 @@
-# LocalSend
+# LocalSend (PRP Fork)
 
 [![CI status][ci-badge]][ci-workflow]
 [![Translations][translate-badge]][translate-link]
 [![Packaging status][packaging-badge]][packaging-link]
 
-[ci-badge]: https://github.com/localsend/localsend/actions/workflows/ci.yml/badge.svg
-[ci-workflow]: https://github.com/localsend/localsend/actions/workflows/ci.yml
+[ci-badge]: https://github.com/ghshhf/localsend/actions/workflows/ci.yml/badge.svg
+[ci-workflow]: https://github.com/ghshhf/localsend/actions/workflows/ci.yml
 [translate-badge]: https://hosted.weblate.org/widget/localsend/app/svg-badge.svg
 [translate-link]: https://hosted.weblate.org/engage/localsend/
 [packaging-badge]: https://repology.org/badge/tiny-repos/localsend.svg
@@ -17,10 +17,34 @@
 
 [homepage]: https://localsend.org
 [discord]: https://discord.gg/GSRWmQNP87
-[github]: https://github.com/localsend/localsend
+[github]: https://github.com/ghshhf/localsend
 [codeberg]: https://codeberg.org/localsend/localsend
 
 LocalSend is a free, open-source app that allows you to securely share files and messages with nearby devices over your local network without needing an internet connection.
+
+---
+
+## 🔁 About This Fork
+
+This fork adds **PRP (Peer Relay Protocol)** — hotspot-based relay functionality that enables file sharing between devices that cannot directly see each other on the local network. It includes:
+
+- **WiFi Hotspot Relay** — One device creates a hotspot, others connect through it
+- **USB Tethering** — Relay over USB connection (Android 5.0+)
+- **Local Network Discovery** — Standard LAN-based peer discovery
+
+### Changes From Upstream
+
+| Area | What Changed |
+|------|-------------|
+| **Hotspot Relay** | Added `PrpService`/`TransportManager` for hotspot-based peer relay |
+| **Web Compatibility** | Conditional imports (`dart:io` → platform-agnostic) prevent web compilation crashes |
+| **macOS Safety** | `SecurityScopedResourceManager` now properly pairs `startAccessing`/`stopAccessing` |
+| **Rust Build** | Fixed `dead_code`/`unused_imports` warnings, restored missing imports, deprecated API fixes |
+| **Dart Analysis** | `refena.dart` type promotion, `signaling_provider.dart` `KeyPair` path, `webrtc_receiver.dart` missing types |
+| **Testing** | 132 tests passing. Added `send_provider`/`server_provider`/`isolate` tests |
+| **CI** | All 4 jobs (format / test / rust / packaging) verified green ✅ |
+
+---
 
 - [About](#about)
 - [Sponsors](#sponsors)
