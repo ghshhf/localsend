@@ -87,3 +87,19 @@ LocalOnlyHotspot 随机生成 SSID。要么实现自定义（Android 13 `SoftApC
 | 5 | P0-2 EventChannel | 中（双端） | 状态真实回传 |
 | 6 | P0-3 + P1-7/P1-8/P1-10 | 小 | 收尾 |
 | 7 | P2-13 Windows PRP | 大 | 自家拓扑真收益 |
+
+---
+
+## 遗留问题处置记录（2026-09-22 22:40）
+
+**`build_exe_unsigned.yml` startup_failure —— 已修复（提交 `b8a091c`）**
+
+- 症状：0 个 job 直接失败，run 以文件路径命名，每次 push main 都产生一个。
+- 根因（从失败 run 页面的注解抓到）：`(Line 37, Col 18): Unrecognized named-value: 'runner'`。
+  `PUB_CACHE: ${{ runner.temp }}/pub-cache` 写在 job 级 `env:`，但 GitHub Actions 的 `runner` 上下文只在 `steps` 内可用，job/workflow 级 `env` 的表达式校验直接判整个文件非法。
+  （上一个提交 fb3a6e7「ci: fix runner context」把这条坑写进了注释，但表达式本身没挪位置。）
+- 修复：`PUB_CACHE` 下放到 `Dependencies` 与 `Compile for Windows` 两个 step 的 step 级 `env`（`runner` 在 step 内合法），缓存 `path:` 不动。
+- 验证：
+  1. 修复后 push main 不再产生该工作流的 run（合法 tag-only 工作流不会被分支 push 触发）；
+  2. tag `v1.18.2`（已从上游旧提交挪到 `b8a091c`）触发的真实构建正常起跑，无 startup_failure；
+  3. 预期产物：release v1.18.2 中 4 个 APK 被修复版覆盖（--clobber），Windows EXE 首次产出挂载。
