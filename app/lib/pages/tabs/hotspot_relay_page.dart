@@ -478,7 +478,10 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                 label: '断开中继',
                 icon: Icons.link_off,
                 color: theme.colorScheme.error,
-                onPressed: () => prpService.dispatchAsync(DisconnectRelayAction()),
+                // DisconnectRelayAction 是同步 ReduxAction（只改 state，不 await
+                // 任何东西），只能走 dispatch；dispatchAsync 要求
+                // AsynchronousReduxAction，会编译不过。
+                onPressed: () => prpService.dispatch(DisconnectRelayAction()),
               ),
             ] else
               _buildActionButton(
