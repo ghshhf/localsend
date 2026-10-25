@@ -253,6 +253,9 @@ class UsbTetheringTransport implements TransportInterface {
   void _setError(String message) {
     if (_disposed) return;
     _errorMessage = message;
+    // Drop stale connection info: a failed start/connect must not leave
+    // activeInfo pointing at a previous interface.
+    _transportInfo = null;
     _state = TransportState.error;
     _stateController.add(TransportState.error);
     _logger.severe(message);

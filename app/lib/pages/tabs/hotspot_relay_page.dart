@@ -23,6 +23,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
   // Client mode form fields
   final _ssidController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _relayUrlController = TextEditingController();
   bool _obscurePassword = true;
   TransportType _selectedTransport = TransportType.wifiHotspot;
 
@@ -37,6 +38,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
     _tabController.dispose();
     _ssidController.dispose();
     _passwordController.dispose();
+    _relayUrlController.dispose();
     super.dispose();
   }
 
@@ -126,6 +128,10 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
     final prpService = context.redux(prpProvider);
     final isHosting = prpState.mode == PrpMode.host;
     final isConnected = prpState.state == PrpConnectionState.connected;
+    // Disable the start button while a start is in flight: a second dispatch
+    // races the first, and the native BUSY reply would turn a successful start
+    // into an error state.
+    final isStarting = prpState.state == PrpConnectionState.connecting;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -165,9 +171,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
               label: _selectedTransport == TransportType.usbTethering ? 'Start USB Relay' : t.hotspotRelayPage.startHotspot,
               icon: _selectedTransport == TransportType.usbTethering ? Icons.usb : Icons.wifi_tethering,
               color: theme.colorScheme.primary,
-              onPressed: () => prpService.dispatchAsync(
-                StartHostAction(transportType: _selectedTransport),
-              ),
+              onPressed: isStarting ? null : () => prpService.dispatchAsync(StartHostAction(transportType: _selectedTransport)),
             ),
 
             const SizedBox(height: 12),
@@ -364,6 +368,8 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
 
             const SizedBox(height: 12),
 
+            _buildRelayCard(theme),
+
             // Error message
             if (prpState.errorMessage != null) ...[
               const SizedBox(height: 12),
@@ -402,6 +408,103 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
       return prpState.state != PrpConnectionState.connecting;
     }
     return _ssidController.text.isNotEmpty && prpState.state != PrpConnectionState.connecting;
+  }
+
+  // ============================================================
+  //  PUBLIC RELAY (PRP bridge entry)
+  // ============================================================
+
+  /// Entry point for the public relay bridge.
+  ///
+  /// Until this existed, `ConnectToRelayAction` had no caller anywhere in the
+  /// app: the four `relay*` state fields were written but never rendered, so the
+  /// whole relay path was dead code.
+  Widget _buildRelayCard(ThemeData theme) {
+    final prpState = context.ref.watch(prpProvider);
+    final prpService = context.redux(prpProvider);
+    final isBusy = prpState.state == PrpConnectionState.connecting;
+    final isLinked = prpState.relayUrl != null && prpState.state == PrpConnectionState.connected;
+
+    void connectRelay() {
+      final raw = _relayUrlController.text.trim();
+      if (raw.isEmpty) return;
+      // A trailing slash would yield `//api/prp/register`, which no router
+      // matches; the symptom is an opaque "relay unreachable".
+      final normalized = raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
+      prpService.dispatchAsync(ConnectToRelayAction(relayUrl: normalized));
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.hub_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text('公共中继 (PRP)', style: theme.textTheme.titleMedium)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isLinked ? '已连接。中继侧已记录本机自检，可被对端读取。' : '两端不在同一热点时，通过公网中继做 rendezvous（需自建或已部署的 relay 服务）。',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _relayUrlController,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              enabled: !isLinked && !isBusy,
+              decoration: const InputDecoration(
+                labelText: '中继地址',
+                hintText: 'http://192.168.1.10:3000',
+                prefixIcon: Icon(Icons.link),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => connectRelay(),
+            ),
+            const SizedBox(height: 12),
+            if (isLinked) ...[
+              if (prpState.relayDeviceId != null) _relayInfoRow(theme, '设备 ID', prpState.relayDeviceId!),
+              if (prpState.relayInstruction != null) _relayInfoRow(theme, '中继指令', prpState.relayInstruction!),
+              if (prpState.relayLastEcho != null) _relayInfoRow(theme, '回声', prpState.relayLastEcho!),
+              const SizedBox(height: 8),
+              _buildActionButton(
+                theme: theme,
+                label: '断开中继',
+                icon: Icons.link_off,
+                color: theme.colorScheme.error,
+                onPressed: () => prpService.dispatchAsync(DisconnectRelayAction()),
+              ),
+            ] else
+              _buildActionButton(
+                theme: theme,
+                label: isBusy ? '注册中…' : '连接中继',
+                icon: isBusy ? Icons.hourglass_top : Icons.cloud_upload_outlined,
+                color: theme.colorScheme.secondary,
+                onPressed: isBusy || _relayUrlController.text.trim().isEmpty ? null : connectRelay,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _relayInfoRow(ThemeData theme, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 72, child: Text(label, style: theme.textTheme.bodySmall)),
+          Expanded(child: SelectableText(value, style: theme.textTheme.bodySmall)),
+        ],
+      ),
+    );
   }
 
   // ============================================================

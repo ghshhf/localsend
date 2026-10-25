@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -98,14 +99,17 @@ class PrpState {
     String? relayInstruction,
     String? relayLastEcho,
     bool clearRelay = false,
+    bool clearNetwork = false,
   }) {
+    // 传 null 在 copyWith 里等于「不改」，所以想清空必须显式 clearNetwork: true
+    // （同 clearError / clearRelay 的写法）。三个连接期字段一起受它控制。
     return PrpState(
       mode: mode ?? this.mode,
       state: state ?? this.state,
       transportType: transportType ?? this.transportType,
-      networkName: networkName ?? this.networkName,
-      networkPassword: networkPassword ?? this.networkPassword,
-      ipAddress: ipAddress ?? this.ipAddress,
+      networkName: clearNetwork ? null : (networkName ?? this.networkName),
+      networkPassword: clearNetwork ? null : (networkPassword ?? this.networkPassword),
+      ipAddress: clearNetwork ? null : (ipAddress ?? this.ipAddress),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isUsbTetheringAvailable: isUsbTetheringAvailable ?? this.isUsbTetheringAvailable,
       availableTransports: availableTransports ?? this.availableTransports,
@@ -162,6 +166,20 @@ class PrpService extends ReduxNotifier<PrpState> {
 
   /// Access the transport manager (for direct transport operations).
   TransportManager get transportManager => _transportManager;
+
+  @override
+  void dispose() {
+    // BaseNotifier.dispose() is synchronous, while teardown closes stream
+    // controllers — fire-and-forget is the only option. The error is swallowed
+    // explicitly so a teardown failure cannot surface as an unhandled async
+    // error in the zone (which would fail binding-less unit tests).
+    unawaited(
+      _transportManager.dispose().catchError((Object e, StackTrace st) {
+        _logger.warning('TransportManager dispose failed: $e', e, st);
+      }),
+    );
+    super.dispose();
+  }
 }
 
 /// Start PRP in host mode using the specified transport.
@@ -222,9 +240,8 @@ class StopHostAction extends AsyncReduxAction<PrpService, PrpState> {
     return state.copyWith(
       mode: PrpMode.idle,
       state: stopped ? PrpConnectionState.disconnected : PrpConnectionState.error,
-      networkName: null,
-      networkPassword: null,
-      ipAddress: null,
+      // 三处 null 改由 clearNetwork 驱动：直接传 null 是「不改」，清不掉。
+      clearNetwork: true,
       errorMessage: stopped ? null : 'Failed to stop host mode',
       clearError: stopped,
     );
@@ -289,9 +306,7 @@ class DisconnectPeerAction extends AsyncReduxAction<PrpService, PrpState> {
     return state.copyWith(
       mode: PrpMode.idle,
       state: PrpConnectionState.disconnected,
-      networkName: null,
-      networkPassword: null,
-      ipAddress: null,
+      clearNetwork: true,
       clearError: true,
     );
   }
@@ -379,6 +394,14 @@ class ConnectToRelayAction extends AsyncReduxAction<PrpService, PrpState> {
       );
     }
     final deviceId = (reg['device_id'] as String?) ?? '';
+    if (deviceId.isEmpty) {
+      // device_id 是中继侧唯一的会话句柄；空着继续走，后续 message 全都无法归类。
+      return state.copyWith(
+        relayUrl: relayUrl,
+        state: PrpConnectionState.error,
+        errorMessage: '中继注册未返回 device_id',
+      );
+    }
     final instruction = (reg['instruction'] as String?) ?? '';
 
     // 3) 收到指令后，把自检内容发回中继，并取回 echo（含 relay 侧排队消息）
@@ -386,9 +409,22 @@ class ConnectToRelayAction extends AsyncReduxAction<PrpService, PrpState> {
       '$relayUrl/api/prp/message',
       {'device_id': deviceId, 'content': selfCheck},
     );
-    final echo = msg?['relay_says'] as String? ?? msg?['echo'] as String?;
+    // 注册成功但回传失败 = 握手没闭环。早前这里会用 null echo 硬报 connected，
+    // 于是 UI 显示「已连接」而中继侧什么都没收到，是最难查的一类假成功。
+    if (msg == null || msg['ok'] != true) {
+      return state.copyWith(
+        relayUrl: relayUrl,
+        relayDeviceId: deviceId,
+        state: PrpConnectionState.error,
+        errorMessage: '中继握手未完成（已注册，但自检回传失败）',
+      );
+    }
+    final echo = msg['relay_says'] as String? ?? msg['echo'] as String?;
 
     return state.copyWith(
+      // mode 不清 idle 的话 PrpState.isActive 仍是 false（见 :83），
+      // UI 的「已连接」判定和 host/client 分支都会落错。
+      mode: PrpMode.client,
       relayUrl: relayUrl,
       relayDeviceId: deviceId,
       relayInstruction: instruction,
@@ -398,22 +434,42 @@ class ConnectToRelayAction extends AsyncReduxAction<PrpService, PrpState> {
     );
   }
 
+  /// Per-request budget for the relay bridge.
+  ///
+  /// `HttpClient()` has no connection timeout by default, and a public host may
+  /// blackhole packets — without this the UI sits in "connecting" until the OS
+  /// gives up (minutes), which is exactly the symptom this guard removes.
+  static const _relayTimeout = Duration(seconds: 10);
+
   Future<Map<String, dynamic>?> _relayPost(
     String url,
     Map<String, dynamic> body,
   ) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+      _logger.warning('Relay URL rejected (need http/https): $url');
+      return null;
+    }
+    if (uri.isScheme('http')) {
+      // The self-check payload discloses transport capabilities and device id.
+      _logger.warning('Relay URL uses plain HTTP — payload is not encrypted: $url');
+    }
+
     HttpClient? client;
     try {
-      client = HttpClient();
-      final req = await client.postUrl(Uri.parse(url));
+      client = HttpClient()..connectionTimeout = _relayTimeout;
+      final req = await client.postUrl(uri).timeout(_relayTimeout);
       req.headers.set('Content-Type', 'application/json');
       req.write(jsonEncode(body));
-      final resp = await req.close();
-      final data = await resp.transform(utf8.decoder).join();
-      if (resp.statusCode == 200) {
-        return jsonDecode(data) as Map<String, dynamic>;
+      final resp = await req.close().timeout(_relayTimeout);
+      if (resp.statusCode != 200) {
+        _logger.warning('Relay POST $url -> ${resp.statusCode}');
+        return null;
       }
-      _logger.warning('Relay POST $url -> ${resp.statusCode}');
+      final data = await resp.transform(utf8.decoder).join().timeout(_relayTimeout);
+      return jsonDecode(data) as Map<String, dynamic>;
+    } on TimeoutException {
+      _logger.warning('Relay POST timed out after ${_relayTimeout.inSeconds}s: $url');
     } catch (e, st) {
       _logger.warning('Relay POST failed: $e', e, st);
     } finally {
@@ -429,6 +485,7 @@ class DisconnectRelayAction extends ReduxAction<PrpService, PrpState> {
   PrpState reduce() {
     _logger.info('Disconnecting PRP from relay');
     // 必须走 clearRelay：四个字段传 null 在 copyWith 里等于"不改"。
-    return state.copyWith(clearRelay: true);
+    // mode 同时回 idle，否则 isActive 仍为 true。
+    return state.copyWith(mode: PrpMode.idle, clearRelay: true);
   }
 }

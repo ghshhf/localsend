@@ -40,6 +40,10 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
         // Intent actions for hotspot state changes
         private const val ACTION_HOTSPOT_STATE_CHANGED =
             "android.net.wifi.WIFI_AP_STATE_CHANGED"
+
+        // Timeout for ConnectivityManager.requestNetwork. A request that never
+        // resolves leaks its callback until the per-app limit is hit.
+        private const val REQUEST_NETWORK_TIMEOUT_MS = 30_000
     }
 
     private var wifiManager: WifiManager? = null
@@ -151,13 +155,11 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
 
             pendingStartResult = result
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                // Android 13+: Use new API
-                startHotspotAndroid13(wifiManager, result)
-            } else {
-                // Android 8-12: Use LocalOnlyHotspot
-                startLocalOnlyHotspot(wifiManager, result)
-            }
+            // startLocalOnlyHotspot is the right call on every API level we
+            // ship (26+). The previous 13/Tiramisu branch only forwarded to
+            // this same method, so it was deleted rather than kept as a
+            // misleading placeholder for a SoftApConfiguration path we do not use.
+            startLocalOnlyHotspot(wifiManager)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start hotspot", e)
             pendingStartResult = null
@@ -166,12 +168,34 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun startLocalOnlyHotspot(wifiManager: WifiManager, result: MethodChannel.Result) {
+    private fun startLocalOnlyHotspot(wifiManager: WifiManager) {
         // Public signature: startLocalOnlyHotspot(LocalOnlyHotspotCallback callback, Handler handler)
         wifiManager.startLocalOnlyHotspot(
             object : WifiManager.LocalOnlyHotspotCallback() {
                 override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
                     Log.d(TAG, "LocalOnlyHotspot started")
+
+                    // Reply exactly once. Taking the pending result and nulling
+                    // it in the same step means a late onStopped/onFailed can
+                    // never reply a second time (which would throw
+                    // IllegalStateException "Reply already submitted").
+                    val pending = pendingStartResult
+                    pendingStartResult = null
+
+                    if (pending == null) {
+                        // The start was abandoned before the OS called back
+                        // (stopHotspot replied first). Never leave an orphan
+                        // hotspot running behind the user's back.
+                        Log.w(TAG, "Hotspot started after the start was abandoned; closing it")
+                        // close() is API 26, same level as startLocalOnlyHotspot.
+                        try {
+                            reservation.close()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error closing orphaned reservation", e)
+                        }
+                        return
+                    }
+
                     // Keep the reservation alive to prevent hotspot from stopping
                     hotspotReservation = reservation
 
@@ -187,8 +211,7 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                         "password" to password,
                         "isRunning" to true,
                     )
-                    pendingStartResult = null
-                    result.success(info)
+                    pending.success(info)
 
                     // Register broadcast receiver to monitor hotspot state
                     registerHotspotStateReceiver(reservation)
@@ -197,10 +220,9 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                 override fun onStopped() {
                     Log.d(TAG, "LocalOnlyHotspot stopped")
                     // If a start was still pending, it can never succeed now.
-                    pendingStartResult?.let {
-                        it.error("HOTSPOT_STOPPED", "Hotspot stopped before start completed", null)
-                    }
+                    val pending = pendingStartResult
                     pendingStartResult = null
+                    pending?.error("HOTSPOT_STOPPED", "Hotspot stopped before start completed", null)
                     // Notify Dart so the UI does not stay in a fake "connected" state.
                     notifyEvent("hotspotStopped")
                 }
@@ -216,20 +238,13 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                             "Incompatible mode (tethering already active)"
                         else -> "Unknown error (code: $reason)"
                     }
+                    val pending = pendingStartResult
                     pendingStartResult = null
-                    result.error("HOTSPOT_FAILED", errorMsg, null)
+                    pending?.error("HOTSPOT_FAILED", errorMsg, null)
                 }
             },
             Handler(Looper.getMainLooper()),
         )
-    }
-
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun startHotspotAndroid13(wifiManager: WifiManager, result: MethodChannel.Result) {
-        // On Android 13+, we can use the newer SoftApConfiguration API
-        // but startLocalOnlyHotspot still works as the primary method.
-        // Fall through to the standard approach.
-        startLocalOnlyHotspot(wifiManager, result)
     }
 
     /**
@@ -255,6 +270,10 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
 
         unregisterHotspotStateReceiver()
         unregisterNetworkCallback()
+        // Detach the process from the hotspot network. Without this the whole
+        // app keeps routing through a network that no longer exists, so the
+        // regular LocalSend transfer (plain LAN) breaks until process restart.
+        unbindProcessNetwork()
 
         result.success(mapOf("stopped" to true))
     }
@@ -323,11 +342,22 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
         password: String,
         result: MethodChannel.Result
     ) {
-        val specifier = WifiNetworkSpecifier.Builder()
-            .setSsid(ssid)
-            .setWpa2Passphrase(password)
-            .setIsEnhancedOpen(false)
-            .build()
+        // setWpa2Passphrase throws for anything outside 8..63 chars, which
+        // would surface as an opaque CONNECT_ERROR. Validate up front instead.
+        val specifierBuilder = WifiNetworkSpecifier.Builder().setSsid(ssid)
+        if (password.isEmpty()) {
+            specifierBuilder.setIsEnhancedOpen(true)
+        } else if (password.length in 8..63) {
+            specifierBuilder.setWpa2Passphrase(password)
+        } else {
+            result.error(
+                "INVALID_PASSWORD",
+                "WiFi password must be 8-63 characters (got ${password.length})",
+                null,
+            )
+            return
+        }
+        val specifier = specifierBuilder.build()
 
         val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
@@ -342,25 +372,53 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
 
         // Register a network callback to track connection progress
         val callback = object : ConnectivityManager.NetworkCallback() {
+            // onAvailable and onUnavailable can both fire on some OEM stacks;
+            // replying twice throws IllegalStateException.
+            private var replied = false
+
+            private fun replyOnce(block: () -> Unit) {
+                if (replied) return
+                replied = true
+                block()
+            }
+
             override fun onAvailable(network: Network) {
                 Log.d(TAG, "Connected to hotspot network: $network")
                 // Attempt to bind to this network for discovery
-                cm.bindProcessToNetwork(network)
-                result.success(mapOf("connected" to true, "ssid" to ssid))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    cm.bindProcessToNetwork(network)
+                }
+                replyOnce {
+                    result.success(mapOf("connected" to true, "ssid" to ssid))
+                }
             }
 
             override fun onUnavailable() {
                 Log.e(TAG, "Hotspot network unavailable")
-                result.error("CONNECT_UNAVAILABLE", "Could not connect to hotspot", null)
+                replyOnce {
+                    result.error("CONNECT_UNAVAILABLE", "Could not connect to hotspot", null)
+                }
             }
 
             override fun onLost(network: Network) {
                 Log.d(TAG, "Lost hotspot network: $network")
+                // Release the process binding and tell Dart. Without this the
+                // UI keeps showing "connected" and the whole app stays pinned
+                // to a network that is gone.
+                unbindProcessNetwork()
+                notifyEvent("hotspotStopped")
             }
         }
 
         networkCallback = callback
-        cm.requestNetwork(request, callback)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Without a timeout, a request that never resolves keeps its
+            // callback alive; Android caps callbacks around 100 per app and
+            // requestNetwork starts throwing once that is exhausted.
+            cm.requestNetwork(request, callback, REQUEST_NETWORK_TIMEOUT_MS)
+        } else {
+            cm.requestNetwork(request, callback)
+        }
     }
 
     private fun connectToWifiLegacy(
@@ -408,14 +466,12 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
      */
     private fun disconnectWifi(result: MethodChannel.Result) {
         Log.d(TAG, "disconnectWifi called")
+        // unregisterNetworkCallback() already releases and nulls the callback,
+        // so the second unregister block that used to follow it was dead code.
         unregisterNetworkCallback()
-
-        // Release the hotspot network
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            connectivityManager?.let { cm ->
-                networkCallback?.let { cm.unregisterNetworkCallback(it) }
-            }
-        }
+        // Must unbind, otherwise the process stays pinned to a dead hotspot
+        // network and all other traffic (including plain LAN transfers) dies.
+        unbindProcessNetwork()
 
         result.success(mapOf("disconnected" to true))
     }
@@ -555,6 +611,22 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
     }
 
     /**
+     * Release the process-wide binding installed by [connectToWifiAndroid10].
+     *
+     * `bindProcessToNetwork` is process-scoped, not transport-scoped: leaving it
+     * set keeps every outgoing socket on a network that is about to disappear,
+     * which silently breaks the app's regular LAN transfers.
+     */
+    private fun unbindProcessNetwork() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            connectivityManager?.bindProcessToNetwork(null)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error unbinding process network", e)
+        }
+    }
+
+    /**
      * Clean up all resources.
      */
     fun dispose() {
@@ -568,5 +640,6 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
         eventSink = null
         unregisterHotspotStateReceiver()
         unregisterNetworkCallback()
+        unbindProcessNetwork()
     }
 }

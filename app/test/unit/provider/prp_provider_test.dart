@@ -46,6 +46,65 @@ void main() {
       final kept = state.copyWith();
       expect(kept.errorMessage, 'some error');
     });
+
+    test('copyWith clearNetwork should clear connection fields', () {
+      final state = PrpState(
+        mode: PrpMode.host,
+        state: PrpConnectionState.connected,
+        networkName: 'LocalSend-Relay',
+        networkPassword: 'secret123',
+        ipAddress: '192.168.43.1',
+      );
+
+      // Regression guard: passing null used to mean "keep", so StopHostAction
+      // left the previous SSID/password on screen after stopping the hotspot.
+      final cleared = state.copyWith(
+        mode: PrpMode.idle,
+        state: PrpConnectionState.disconnected,
+        clearNetwork: true,
+      );
+
+      expect(cleared.networkName, isNull);
+      expect(cleared.networkPassword, isNull);
+      expect(cleared.ipAddress, isNull);
+      expect(cleared.mode, PrpMode.idle);
+      expect(cleared.isActive, false);
+    });
+
+    test('copyWith keeps connection fields unless clearNetwork is set', () {
+      final state = PrpState(
+        networkName: 'A',
+        networkPassword: 'B',
+        ipAddress: 'C',
+      );
+
+      // Pins the "null means unchanged" contract that the callers rely on.
+      final kept = state.copyWith(
+        networkName: null,
+        networkPassword: null,
+        ipAddress: null,
+      );
+
+      expect(kept.networkName, 'A');
+      expect(kept.networkPassword, 'B');
+      expect(kept.ipAddress, 'C');
+    });
+
+    test('copyWith clearRelay should clear relay fields', () {
+      final state = PrpState(
+        relayUrl: 'https://relay.example',
+        relayDeviceId: 'dev-1',
+        relayInstruction: 'ping',
+        relayLastEcho: 'pong',
+      );
+
+      final cleared = state.copyWith(clearRelay: true);
+
+      expect(cleared.relayUrl, isNull);
+      expect(cleared.relayDeviceId, isNull);
+      expect(cleared.relayInstruction, isNull);
+      expect(cleared.relayLastEcho, isNull);
+    });
   });
 
   group('PrpService (ReduxNotifier)', () {

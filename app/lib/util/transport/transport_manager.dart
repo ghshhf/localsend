@@ -22,6 +22,12 @@ class TransportManager {
   final LocalNetworkTransport _localNetworkTransport = LocalNetworkTransport();
   TransportInterface? _activeTransport;
   bool _initialized = false;
+  bool _disposed = false;
+
+  /// Subscriptions to each transport's streams. Held so [dispose] can cancel
+  /// them — closing the controllers alone leaves the sources still pushing into
+  /// this manager, and a later re-init would subscribe a second time.
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
 
   // Aggregated streams
   final StreamController<PeerInfo> _peerController = StreamController<PeerInfo>.broadcast();
@@ -56,34 +62,46 @@ class TransportManager {
       await _usbTransport.init();
 
       // Wire up WiFi transport events
-      _wifiTransport.onPeerDiscovered.listen(
-        (peer) => _peerController.add(peer),
+      _subscriptions.add(
+        _wifiTransport.onPeerDiscovered.listen(
+          (peer) => _peerController.add(peer),
+        ),
       );
-      _wifiTransport.onStateChanged.listen((state) {
-        if (_activeTransport == _wifiTransport) {
-          _stateController.add(state);
-        }
-      });
+      _subscriptions.add(
+        _wifiTransport.onStateChanged.listen((state) {
+          if (_activeTransport == _wifiTransport) {
+            _stateController.add(state);
+          }
+        }),
+      );
 
       // Wire up USB transport events
-      _usbTransport.onPeerDiscovered.listen(
-        (peer) => _peerController.add(peer),
+      _subscriptions.add(
+        _usbTransport.onPeerDiscovered.listen(
+          (peer) => _peerController.add(peer),
+        ),
       );
-      _usbTransport.onStateChanged.listen((state) {
-        if (_activeTransport == _usbTransport) {
-          _stateController.add(state);
-        }
-      });
+      _subscriptions.add(
+        _usbTransport.onStateChanged.listen((state) {
+          if (_activeTransport == _usbTransport) {
+            _stateController.add(state);
+          }
+        }),
+      );
 
       // Wire up local network transport events (stub, not yet implemented)
-      _localNetworkTransport.onPeerDiscovered.listen(
-        (peer) => _peerController.add(peer),
+      _subscriptions.add(
+        _localNetworkTransport.onPeerDiscovered.listen(
+          (peer) => _peerController.add(peer),
+        ),
       );
-      _localNetworkTransport.onStateChanged.listen((state) {
-        if (_activeTransport == _localNetworkTransport) {
-          _stateController.add(state);
-        }
-      });
+      _subscriptions.add(
+        _localNetworkTransport.onStateChanged.listen((state) {
+          if (_activeTransport == _localNetworkTransport) {
+            _stateController.add(state);
+          }
+        }),
+      );
 
       _initialized = true;
       _logger.info('Transport manager initialized');
@@ -219,8 +237,19 @@ class TransportManager {
 
   /// Clean up all resources.
   Future<void> dispose() async {
-    if (!_initialized) return;
+    if (_disposed) return;
+    _disposed = true;
     await stopActive();
+    // Cancel source subscriptions first so nothing pushes into the controllers
+    // while they are being closed.
+    for (final sub in _subscriptions) {
+      try {
+        await sub.cancel();
+      } catch (e) {
+        _logger.warning('Error cancelling transport subscription: $e');
+      }
+    }
+    _subscriptions.clear();
     await _wifiTransport.dispose();
     await _usbTransport.dispose();
     await _localNetworkTransport.dispose();

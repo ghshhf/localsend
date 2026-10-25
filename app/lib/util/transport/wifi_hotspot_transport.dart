@@ -78,6 +78,14 @@ class WifiHotspotTransport implements TransportInterface {
       final password = result['password'] as String? ?? '';
       final isRunning = result['isRunning'] as bool? ?? false;
 
+      if (!isRunning) {
+        // The native side returned a map but says the hotspot is not running.
+        // Reporting success here leaves the UI showing a QR code for an SSID
+        // that no peer can join, which is worse than an explicit failure.
+        _setError('Failed to start hotspot: native reported isRunning=false');
+        return false;
+      }
+
       _transportInfo = TransportInfo(
         type: TransportType.wifiHotspot,
         networkName: ssid,
@@ -249,6 +257,9 @@ class WifiHotspotTransport implements TransportInterface {
   void _setError(String message) {
     if (_disposed) return;
     _errorMessage = message;
+    // Drop stale connection info: a failed start/connect must not leave
+    // activeInfo pointing at the previous SSID.
+    _transportInfo = null;
     _state = TransportState.error;
     _stateController.add(TransportState.error);
     _logger.severe(message);
