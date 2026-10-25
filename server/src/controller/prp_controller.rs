@@ -368,4 +368,61 @@ mod tests {
         assert!(!reg.ok);
         assert!(state.prp_devices.lock().await.is_empty());
     }
+
+    /// The handler tests above call the functions directly, which would still
+    /// pass if `configure_routes()` forgot to mount them. This one drives the
+    /// real `Router`, so a wrong path fails here instead of returning 404 in
+    /// production.
+    #[tokio::test]
+    async fn router_serves_register_then_message_over_http() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let state = AppState::new();
+        let app = crate::configure_routes().with_state(state);
+
+        let register = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/prp/register")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"alias":"phone-a","self_check":{"mode":"idle"}}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(register.status(), StatusCode::OK);
+
+        let bytes = axum::body::to_bytes(register.into_body(), MAX_PAYLOAD_BYTES)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["ok"], true);
+        let device_id = body["device_id"].as_str().unwrap().to_string();
+
+        let message = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/prp/message")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"device_id":"{device_id}","content":{{"mode":"idle"}}}}"#
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(message.status(), StatusCode::OK);
+
+        let bytes = axum::body::to_bytes(message.into_body(), MAX_PAYLOAD_BYTES)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["messages"], 1);
+    }
 }

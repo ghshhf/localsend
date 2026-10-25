@@ -203,7 +203,7 @@ PRP 骨架的质量在线：接口抽象、状态机设计、条件导入、chan
 | 17 | P1-12 传输层从不 dispose | `PrpService` 覆写 `dispose()`，`catchError` 兜住异步异常（否则无 binding 单测会红） | `prp_provider.dart:169-182` |
 | 18 | P1-13 UI 无 pending 守卫 | starting 态禁用 Start host 按钮 | `hotspot_relay_page.dart:129-132, 172` |
 | 19 | 测试空白 | 新增 3 条回归测试：`clearNetwork` 能清、不清时保持、`clearRelay` 能清 | `prp_provider_test.dart:50-101` |
-| 20 | P0-1 中继服务端不存在 | 在 `server` 侧补齐两个端点 + 5 条测试（见 4.1） | `prp_controller.rs`（新）、`state.rs`、`main.rs` |
+| 20 | P0-1 中继服务端不存在 | 在 `server` 侧补齐两个端点 + 7 条测试（含 1 条走真实 `Router` 的 HTTP 测试，见 4.1） | `prp_controller.rs`（新）、`state.rs`、`main.rs`、`Cargo.toml` |
 | 21 | P0-2 `ConnectToRelayAction` 无入口 | 客户端标签页新增「公共中继」卡片：地址输入 + 连接/断开 + 显示 device_id/指令/回声 | `hotspot_relay_page.dart:412-505` |
 | 22 | 会话句柄回传失败仍报 connected | `msg == null \|\| ok != true` 时进 error，不再假成功 | `prp_provider.dart:412-420` |
 
@@ -240,6 +240,27 @@ relay 只做 rendezvous：不排队、不主动连接、不解释 `self_check` �
 2. **行宽**：新增行长全部 ≤ 150 —— 阈值取自 `app/analysis_options.yaml` 的 `formatter.page_width: 150`，不是默认 80。多行调用均带尾逗号，配合 `trailing_commas: preserve` 不会被格式化器压回单行。
 3. **残留引用**：`startHotspotAndroid13`、`networkName: null` 等旧写法全仓零命中。
 
-**真正的编译与测试结论仍需 CI 给出。** 本轮改动没有触及上游代码路径，风险集中在 `HotspotRelayPlugin.kt` 的 API level 分支、`PrpService.dispose()` 的单元测试副作用，以及新增的 `prp_controller.rs`（CI 的 `cargo test --package server` 会跑它自带的 5 条测试）。
+**真正的编译与测试结论仍需 CI 给出。** 本轮改动没有触及上游代码路径，风险集中在 `HotspotRelayPlugin.kt` 的 API level 分支、`PrpService.dispose()` 的单元测试副作用，以及新增的 `prp_controller.rs`（CI 的 `cargo test --package server` 会跑它自带的 7 条测试）。
+
+### 4.2 CI 实测结果（2026-10-26，`bf195ea` 之后）
+
+第一次推送（`8f9613f`）`test` job 红，analyze 报一条：
+
+```
+error • The argument type 'DisconnectRelayAction' can't be assigned to the parameter
+type 'AsynchronousReduxAction<PrpService, PrpState, dynamic>'.
+• lib/pages/tabs/hotspot_relay_page.dart:481:59 • argument_type_not_assignable
+```
+
+原因很实在：`DisconnectRelayAction` 是同步 `ReduxAction`，我用了 `dispatchAsync`。改 `dispatch` 后重跑，四个 job 全绿：
+
+| job | 结果 | 实测内容 |
+|---|---|---|
+| format | ✅ | `dart format --set-exit-if-changed lib test` |
+| test | ✅ | `flutter analyze` 0 issue；**141 条测试全过**，含新增 3 条 `clearNetwork`/`clearRelay` 回归 |
+| rust | ✅ | `cargo test --package server`：**7 passed**（`prp_controller` 6 条 + `util::ip` 1 条），`packages/core` 亦全过 |
+| packaging | ✅ | 构建产物 |
+
+三件在这台机器上做不到、由 CI 补上的事：analyze 全量、单测执行、Rust 编译。所以「能编能跑」这句话现在有出处了。
 
 > 本机尝试过装 Flutter 3.41.9 做本地验证（`git clone --depth 1 --branch 3.41.9`），2 分 46 秒只拉到 13MB，判定不可行后放弃并删除临时目录。因此「本机能编」这句话在这台机器上无法成立，验证权交给 CI —— 这也解释了为什么本轮先提交推送再改：CI 的四个 job（format / test / rust / packaging）就是验收。
