@@ -342,3 +342,28 @@ LocalNetworkTransport       ← 只订阅，stop() 不关全局发现
 - 本机仍无 Flutter，`analyze` / `test` / `format` 由 CI 给结论。
 - **真机端到端没跑过**：局域网发现本身依赖真机多播（模拟器多播不可靠），「A 手机开 LAN、B 手机能发现它」这件事只能由插了设备的人验。本轮能证明的只有：接口契约、状态机、回退分支、UI 分支。
 - `LAN` 的 host/client 两个 tab 在语义上是重复的（都是「接入同一个网络」），没做合并 —— 属 UI 收拢，不影响功能。
+
+### 5.8 CI 实测结果（`8b53313`）
+
+| job | 结果 | 实测内容 |
+|---|---|---|
+| format | ✅ | `dart format --set-exit-if-changed lib test` |
+| test | ✅ | `flutter analyze` 0 issue；**159 条测试全过**（原 141 + 本轮的 16 条传输层 + 2 条 `noticeMessage`） |
+| rust | ✅ | `cargo test --package server` 8 passed |
+| packaging | ✅ | 构建产物 |
+
+第一次跑（`fadb164`）四个 job 里 `format` 红，`test` 已经是绿的 —— 也就是说代码能编译、16 条新测试全过，只有格式不合规。差异只有一处模式、出现 4 次：
+
+```dart
+// 写的样子（102 列，远小于 page_width 150）
+final started = await transport.connect(config: const ConnectConfig(ssid: '', password: ''));
+// formatter 要的样子
+final started = await transport.connect(
+  config: const ConnectConfig(ssid: '', password: ''),
+);
+```
+
+记一条新踩的坑：**新版 tall-style formatter 不看总列宽**。`page_width: 150` 只决定「能不能放一行」，而「单个命名参数 + 内层 const 构造」这种形状会被无条件折行。所以「≤150 就不会被格式化」这个推断是错的，上一轮靠行宽自查通过了，这次靠行宽自查漏了。
+
+拿差异的办法：CI 只报 `Formatted xxx.dart` 不给内容，于是临时在 format job 前插了一步 `dart format` + `diff -u` 打进日志（`d75f9c0`），拿到后立刻撤掉。这个临时步骤没有留在最终代码里。
+
