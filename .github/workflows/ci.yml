@@ -51,6 +51,20 @@ jobs:
       - name: Dependencies (cargokit - rust_builder)
         working-directory: packages/localsend_isolates/rust_builder/cargokit/build_tool
         run: flutter pub get
+      # TEMPORARY DIAGNOSTIC - remove once generated code leaves VCS.
+      # Regenerates every committed artifact and prints what changed, so we know
+      # whether a fresh checkout can reproduce the tree byte for byte.
+      - name: Codegen diff (diagnostic)
+        run: |
+          set -x
+          (cd packages/localsend_isolates && dart run build_runner build --delete-conflicting-outputs)
+          (cd app && dart run slang)
+          (cd app && dart run build_runner build --delete-conflicting-outputs)
+          set +x
+          echo "=== git status ==="
+          git status --porcelain
+          echo "=== diff stat ==="
+          git diff --stat
       - name: Analyze (app)
         working-directory: app
         run: flutter analyze
