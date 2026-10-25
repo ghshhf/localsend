@@ -222,7 +222,9 @@ void main() {
     });
 
     test('connect starts the transport when needed and probes the network', () async {
-      final started = await transport.connect(config: const ConnectConfig(ssid: '', password: ''));
+      final started = await transport.connect(
+        config: const ConnectConfig(ssid: '', password: ''),
+      );
 
       expect(started, isTrue);
       expect(transport.state, TransportState.connected);
@@ -235,7 +237,9 @@ void main() {
       final failingTransport = LocalNetworkTransport(discovery: failing);
       addTearDown(failingTransport.dispose);
 
-      final connected = await failingTransport.connect(config: const ConnectConfig(ssid: '', password: ''));
+      final connected = await failingTransport.connect(
+        config: const ConnectConfig(ssid: '', password: ''),
+      );
 
       expect(connected, isFalse);
       expect(failingTransport.state, TransportState.error);
@@ -264,7 +268,9 @@ void main() {
       final peers = <PeerInfo>[];
       transport.onPeerDiscovered.listen(peers.add);
 
-      final connecting = transport.connect(config: const ConnectConfig(ssid: '', password: ''));
+      final connecting = transport.connect(
+        config: const ConnectConfig(ssid: '', password: ''),
+      );
       await Future<void>.delayed(Duration.zero);
 
       // Discovery results arrive while the transport is still in "connecting".
@@ -283,7 +289,9 @@ void main() {
       final gate = Completer<void>();
       discovery.probeGate = gate;
 
-      final connecting = transport.connect(config: const ConnectConfig(ssid: '', password: ''));
+      final connecting = transport.connect(
+        config: const ConnectConfig(ssid: '', password: ''),
+      );
       await Future<void>.delayed(Duration.zero);
 
       await transport.stop();
