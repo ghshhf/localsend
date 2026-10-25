@@ -17,9 +17,14 @@ final _logger = Logger('TransportManager');
 /// actual transport operations without knowing the specifics
 /// of each transport implementation.
 class TransportManager {
+  /// [lanDiscovery] is the app-wide discovery the LAN transport observes. It is
+  /// optional so unit tests can construct a manager without a Refena container;
+  /// without it the LAN transport reports itself as unavailable.
+  TransportManager({LanDiscovery? lanDiscovery}) : _localNetworkTransport = LocalNetworkTransport(discovery: lanDiscovery);
+
   final WifiHotspotTransport _wifiTransport = WifiHotspotTransport();
   final UsbTetheringTransport _usbTransport = UsbTetheringTransport();
-  final LocalNetworkTransport _localNetworkTransport = LocalNetworkTransport();
+  final LocalNetworkTransport _localNetworkTransport;
   TransportInterface? _activeTransport;
   bool _initialized = false;
   bool _disposed = false;
@@ -89,7 +94,7 @@ class TransportManager {
         }),
       );
 
-      // Wire up local network transport events (stub, not yet implemented)
+      // Wire up local network transport events (observes the app-wide discovery)
       _subscriptions.add(
         _localNetworkTransport.onPeerDiscovered.listen(
           (peer) => _peerController.add(peer),

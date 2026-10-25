@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:localsend_app/provider/network/lan_discovery_adapter.dart';
+import 'package:localsend_app/util/transport/local_network_transport.dart';
 import 'package:localsend_app/util/transport/transports.dart';
 import 'package:logging/logging.dart';
 import 'package:refena_flutter/refena_flutter.dart';
@@ -47,6 +49,13 @@ class PrpState {
   final String? networkPassword;
   final String? ipAddress;
   final String? errorMessage;
+
+  /// A non-fatal hint about what the service did, e.g. "the hotspot was
+  /// unavailable, the local network is used instead". Kept apart from
+  /// [errorMessage] so the UI can show it in a neutral tone: a successful
+  /// fallback is not an error.
+  final String? noticeMessage;
+
   final bool isUsbTetheringAvailable;
 
   /// Transport types usable on this device, populated async during init.
@@ -73,6 +82,7 @@ class PrpState {
     this.networkPassword,
     this.ipAddress,
     this.errorMessage,
+    this.noticeMessage,
     this.isUsbTetheringAvailable = false,
     this.availableTransports = const [],
     this.relayUrl,
@@ -92,6 +102,8 @@ class PrpState {
     String? ipAddress,
     String? errorMessage,
     bool clearError = false,
+    String? noticeMessage,
+    bool clearNotice = false,
     bool? isUsbTetheringAvailable,
     List<TransportType>? availableTransports,
     String? relayUrl,
@@ -111,6 +123,7 @@ class PrpState {
       networkPassword: clearNetwork ? null : (networkPassword ?? this.networkPassword),
       ipAddress: clearNetwork ? null : (ipAddress ?? this.ipAddress),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      noticeMessage: clearNotice ? null : (noticeMessage ?? this.noticeMessage),
       isUsbTetheringAvailable: isUsbTetheringAvailable ?? this.isUsbTetheringAvailable,
       availableTransports: availableTransports ?? this.availableTransports,
       // relay 四个字段共用 clearRelay 开关：传 null 表示"不改"，
@@ -124,7 +137,7 @@ class PrpState {
 }
 
 final prpProvider = ReduxProvider<PrpService, PrpState>((ref) {
-  return PrpService();
+  return PrpService(lanDiscovery: NearbyDevicesLanDiscovery(ref));
 });
 
 /// PRP (Peer Relay Protocol) service.
@@ -134,7 +147,12 @@ final prpProvider = ReduxProvider<PrpService, PrpState>((ref) {
 /// - WiFi hotspot relay (cross-platform)
 /// - USB tethering (Android 5.0+)
 class PrpService extends ReduxNotifier<PrpState> {
-  final TransportManager _transportManager = TransportManager();
+  /// [lanDiscovery] is forwarded to the transport manager: the LAN transport
+  /// observes the app-wide discovery instead of starting a second one.
+  /// Optional so unit tests can construct the service without a container.
+  PrpService({LanDiscovery? lanDiscovery}) : _transportManager = TransportManager(lanDiscovery: lanDiscovery);
+
+  final TransportManager _transportManager;
 
   @override
   PrpState init() {
@@ -205,20 +223,50 @@ class StartHostAction extends AsyncReduxAction<PrpService, PrpState> {
       state: PrpConnectionState.connecting,
       transportType: transportType,
       clearError: true,
+      clearNotice: true,
     );
 
-    final success = await notifier._transportManager.startHost(
+    var success = await notifier._transportManager.startHost(
       type: transportType,
       config: HostConfig(alias: alias),
     );
 
+    // ROADMAP P01: a hotspot that cannot be started leaves the device on its
+    // normal network, where the peers are usually still reachable. Fall back
+    // instead of parking the user on an error they cannot act on.
+    var usedTransport = transportType;
+    String? hotspotFailure;
+    if (!success && transportType != TransportType.localNetwork) {
+      final lanAvailable = notifier._transportManager.availableTransports.contains(TransportType.localNetwork);
+      if (lanAvailable) {
+        hotspotFailure = notifier._transportManager.activeError;
+        _logger.info('Host start via $transportType failed ($hotspotFailure); falling back to the local network');
+        success = await notifier._transportManager.startHost(
+          type: TransportType.localNetwork,
+          config: HostConfig(alias: alias),
+        );
+        usedTransport = TransportType.localNetwork;
+      }
+    }
+
     if (success) {
       final info = notifier._transportManager.activeInfo;
+      final fellBack = usedTransport != transportType;
       return state.copyWith(
+        transportType: usedTransport,
         state: PrpConnectionState.connected,
         networkName: info?.networkName,
         networkPassword: info?.password,
         ipAddress: info?.metadata['ipAddress'] as String?,
+        // The LAN transport joins an existing network: it has no SSID or
+        // password, so do not leave a previous hotspot's name on screen.
+        clearNetwork: usedTransport == TransportType.localNetwork,
+        // A silent transport switch would look like the hotspot came up. This
+        // is a hint, not a failure — the connection did come up — so it goes
+        // into noticeMessage instead of the red error slot.
+        noticeMessage: fellBack ? 'Hotspot unavailable (${hotspotFailure ?? 'unknown error'}), using the local network instead' : null,
+        clearNotice: !fellBack,
+        clearError: true,
       );
     } else {
       // Failure resets mode to idle: host mode is not active if startup failed.
@@ -244,6 +292,7 @@ class StopHostAction extends AsyncReduxAction<PrpService, PrpState> {
       clearNetwork: true,
       errorMessage: stopped ? null : 'Failed to stop host mode',
       clearError: stopped,
+      clearNotice: stopped,
     );
   }
 }
@@ -271,6 +320,7 @@ class ConnectToPeerAction extends AsyncReduxAction<PrpService, PrpState> {
       state: PrpConnectionState.connecting,
       transportType: transportType,
       clearError: true,
+      clearNotice: true,
     );
 
     final success = await notifier._transportManager.connectToHost(
@@ -308,6 +358,7 @@ class DisconnectPeerAction extends AsyncReduxAction<PrpService, PrpState> {
       state: PrpConnectionState.disconnected,
       clearNetwork: true,
       clearError: true,
+      clearNotice: true,
     );
   }
 }
@@ -431,6 +482,7 @@ class ConnectToRelayAction extends AsyncReduxAction<PrpService, PrpState> {
       relayLastEcho: echo,
       state: PrpConnectionState.connected,
       clearError: true,
+      clearNotice: true,
     );
   }
 

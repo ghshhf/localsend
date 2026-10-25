@@ -227,7 +227,7 @@ relay 只做 rendezvous：不排队、不主动连接、不解释 `self_check` �
 
 | 项 | 原因 |
 |---|---|
-| P1-4 的退避重试 | 需要重试策略参数（次数/间隔/可取消）。当前是「单次 10s 超时 + 明确报错」，比凭空写一套退避更可控 |
+| P1-4 的退避重试 | **拆成两条看**：P01（失败自动回退到局域网）**已做**，见第五节。P02（热点断开后重试 3 次、指数退避）**未做** —— 回退已经覆盖了「不卡死」，重连属于热点本身的质量改进，且在真机上才能调准间隔 |
 | P2-16 `wifi_state` 广播失效 | 需换 API（`WifiManager.isWifiApEnabled` 反射在 28+ 也被封），属重写 |
 | P2-18 stub 日志噪音 | 改 `availableTransports` 缓存策略会牵动 UI 响应式，收益低 |
 | P2-19 gen 入库 | 涉及 CI 与仓库结构，单独处理 |
@@ -264,3 +264,81 @@ type 'AsynchronousReduxAction<PrpService, PrpState, dynamic>'.
 三件在这台机器上做不到、由 CI 补上的事：analyze 全量、单测执行、Rust 编译。所以「能编能跑」这句话现在有出处了。
 
 > 本机尝试过装 Flutter 3.41.9 做本地验证（`git clone --depth 1 --branch 3.41.9`），2 分 46 秒只拉到 13MB，判定不可行后放弃并删除临时目录。因此「本机能编」这句话在这台机器上无法成立，验证权交给 CI —— 这也解释了为什么本轮先提交推送再改：CI 的四个 job（format / test / rust / packaging）就是验收。
+
+## 五、局域网回退（ROADMAP P01）
+
+### 5.1 先纠一个说法
+
+第四节说「退避重试缺策略参数」——**这句不对**。ROADMAP `:48-49` 写得很清楚（3 次、指数退避）。真正的卡点在 P01：`LocalNetworkTransport` 是 81 行的空壳（`_notImplemented`），`isAvailable` 恒 false，`availableTransports` 永远不列它。**回退无处可退**，重试同一个死掉的热点 3 次只是把失败拖长。
+
+所以先做 LAN 传输本身，回退才有意义。
+
+### 5.2 关键取舍：不能自己再起一套发现
+
+Rust 侧的发现早就齐了（`packages/core/src/multicast`、`startDiscovery`/`announce`/`discoverStaged`/`scanSubnet`），`DiscoveryService` 已经把它跑起来，`app/lib/config/init.dart:216` 在启动时拉起 `StartDiscoveryListener` 并「永远运行」。
+
+而 `startDiscovery` 绑的是**固定 UDP 端口**（`syncState.port`）。再起一个实例会：
+
+1. 第二个绑定抢不到端口 → `multicastError` 非空 → 退化成「无多播」降级模式；
+2. 设备库分成两份，PRP 看到的和发送页看到的不是同一个集合。
+
+所以 LAN 传输**只观察、不拥有**发现：
+
+```
+nearbyDevicesProvider（主 isolate，设备表）
+        │  changes / announce / probe
+        ▼
+NearbyDevicesLanDiscovery   ← 适配层，32 行
+        │
+        ▼
+LocalNetworkTransport       ← 只订阅，stop() 不关全局发现
+```
+
+`stop()` 只取消自己的订阅。若在这里调 `discovery.stop()`，关一次 PRP 连接就会把发送页的设备列表清空。
+
+### 5.3 语义映射
+
+`TransportInterface` 是按热点设计的（host/client + SSID/密码）。局域网是对等的，没有 host 也没有凭据：
+
+| 接口 | 局域网语义 |
+|---|---|
+| `isAvailable` | 拿到 `LanDiscovery` 即可用（平台无关） |
+| `start(HostConfig)` | 接入网络：订阅 + `announce()`，让本机可被发现。`alias` 忽略（来自全局设置） |
+| `connect(ConnectConfig)` | 接入 + `probe()`（`StartSmartScan`：announce + 探收藏，1 秒无果扫子网）。`ssid`/`password` 忽略 —— 设备已在该网络上，没有可验证的对象 |
+| `stop()` / `disconnect()` | 只取消订阅，不动全局发现 |
+| `transportInfo` | `networkName`/`password` 为 null，`metadata['peers']` 报告已发现设备数 |
+
+### 5.4 修掉的两个真 bug
+
+写完之后自查发现，不是「设计取舍」，是错：
+
+1. **connect 期间发现的设备被吞掉**。`_onDevicesChanged` 原本要求 `state == connected` 才转发，而 `connect()` 在 `connecting` 状态下跑探测 —— 探到的设备全丢，`transportInfo` 的 peers 数还是 0。改成按订阅是否存在判断（`_subscription != null`）。
+2. **stop 之后被 probe 复活**。`connect()` 里 `await probe()` 完成后无条件设 `connected`；用户在探测期间点断开，探测结束时会把状态重新点亮。改成完成后检查状态是否仍是 `connecting`。
+
+两条都补了回归测试（`local_network_transport_test.dart`），用 `Completer` 把 probe 悬在半空。
+
+### 5.5 自动回退与提示
+
+`StartHostAction` 里：热点/USB 启动失败且局域网可用 → 自动改用局域网，不把用户丢在错误页。
+
+回退成功是**降级成功，不是错误**。为此在 `PrpState` 新增 `noticeMessage`（+ `clearNotice`），与 `errorMessage` 分开：
+
+- `errorMessage` 渲染成 `errorContainer`（红色）
+- `noticeMessage` 渲染成 `secondaryContainer`（中性）
+
+塞进 `errorMessage` 会让「已连上」显示成红色报错。清理点与 `clearError` 一一对齐（`StartHost`/`StartClient` 入口、`StopHost`、`DisconnectPeer`、`ConnectToRelay`）。
+
+### 5.6 UI 的一处硬伤
+
+`_canConnect()` 原本是「非 USB 就要求 SSID 非空」。LAN 加进来后，用户选 LAN 会发现**连接按钮永远灰着** —— 屏幕上根本没有 SSID 可填。改成只有 `wifiHotspot` 校验 SSID。
+
+同批修掉其余二元判断（`usbTethering ? A : B` 全部改三态）：状态副标题、按钮文案与图标、表单标题、已连接卡片、连接信息卡片。
+
+- 热点：SSID / 密码 / 二维码（二维码编码的是这两样，LAN 下不显示）
+- LAN：说明「本机在同一网络内可被发现」，无 SSID、无密码、无二维码
+
+### 5.7 本轮验证边界
+
+- 本机仍无 Flutter，`analyze` / `test` / `format` 由 CI 给结论。
+- **真机端到端没跑过**：局域网发现本身依赖真机多播（模拟器多播不可靠），「A 手机开 LAN、B 手机能发现它」这件事只能由插了设备的人验。本轮能证明的只有：接口契约、状态机、回退分支、UI 分支。
+- `LAN` 的 host/client 两个 tab 在语义上是重复的（都是「接入同一个网络」），没做合并 —— 属 UI 收拢，不影响功能。

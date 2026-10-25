@@ -146,10 +146,13 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
           const SizedBox(height: 16),
 
           if (isHosting && isConnected) ...[
-            // QR Code showing connection info
-            _buildQrCode(theme, prpState),
+            // The QR carries an SSID and a password. A LAN host has neither —
+            // the device is simply findable on the network it already joined.
+            if (prpState.transportType == TransportType.wifiHotspot) ...[
+              _buildQrCode(theme, prpState),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
 
             // Connection info card
             _buildConnectionInfoCard(theme, prpState),
@@ -168,8 +171,16 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
             // Start host mode button
             _buildActionButton(
               theme: theme,
-              label: _selectedTransport == TransportType.usbTethering ? 'Start USB Relay' : t.hotspotRelayPage.startHotspot,
-              icon: _selectedTransport == TransportType.usbTethering ? Icons.usb : Icons.wifi_tethering,
+              label: switch (_selectedTransport) {
+                TransportType.usbTethering => 'Start USB Relay',
+                TransportType.localNetwork => 'Join Local Network',
+                TransportType.wifiHotspot => t.hotspotRelayPage.startHotspot,
+              },
+              icon: switch (_selectedTransport) {
+                TransportType.usbTethering => Icons.usb,
+                TransportType.localNetwork => Icons.lan,
+                TransportType.wifiHotspot => Icons.wifi_tethering,
+              },
               color: theme.colorScheme.primary,
               onPressed: isStarting ? null : () => prpService.dispatchAsync(StartHostAction(transportType: _selectedTransport)),
             ),
@@ -189,9 +200,15 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _selectedTransport == TransportType.usbTethering
-                          ? 'Connect your device via USB cable and enable USB tethering in system settings.\n\nData is transferred over the USB connection.'
-                          : t.hotspotRelayPage.hostInfoText,
+                      switch (_selectedTransport) {
+                        TransportType.usbTethering =>
+                          'Connect your device via USB cable and enable USB tethering in system settings.\n\nData is transferred over the USB connection.',
+                        TransportType.localNetwork =>
+                          'Keeps the current WiFi network. This device is announced on the local network '
+                              'so other LocalSend devices find it. No hotspot is created and no SSID or '
+                              'password is needed.',
+                        TransportType.wifiHotspot => t.hotspotRelayPage.hostInfoText,
+                      },
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,
                     ),
@@ -236,17 +253,24 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                 child: Column(
                   children: [
                     Icon(
-                      prpState.transportType == TransportType.usbTethering ? Icons.usb : Icons.wifi,
+                      switch (prpState.transportType) {
+                        TransportType.usbTethering => Icons.usb,
+                        TransportType.localNetwork => Icons.lan,
+                        TransportType.wifiHotspot => Icons.wifi,
+                      },
                       size: 48,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      prpState.transportType == TransportType.usbTethering
-                          ? 'Connected via USB'
-                          : t.hotspotRelayPage.connectedTo(
-                              ssid: prpState.networkName ?? '',
-                            ),
+                      switch (prpState.transportType) {
+                        TransportType.usbTethering => 'Connected via USB',
+                        // A LAN connection has no SSID to name.
+                        TransportType.localNetwork => 'Connected via local network',
+                        TransportType.wifiHotspot => t.hotspotRelayPage.connectedTo(
+                          ssid: prpState.networkName ?? '',
+                        ),
+                      },
                       style: theme.textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),
@@ -278,11 +302,17 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      prpState.transportType == TransportType.usbTethering ? 'USB Tethering' : t.hotspotRelayPage.enterHotspotInfo,
+                      switch (prpState.transportType) {
+                        TransportType.usbTethering => 'USB Tethering',
+                        TransportType.localNetwork => 'Local Network Discovery',
+                        TransportType.wifiHotspot => t.hotspotRelayPage.enterHotspotInfo,
+                      },
                       style: theme.textTheme.titleMedium,
                     ),
                     const SizedBox(height: 16),
-                    if (prpState.transportType != TransportType.usbTethering) ...[
+                    // Only the hotspot needs credentials: USB shares a cable and
+                    // the LAN transport joins a network that already exists.
+                    if (prpState.transportType == TransportType.wifiHotspot) ...[
                       // SSID input (WiFi only)
                       TextField(
                         controller: _ssidController,
@@ -346,10 +376,39 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                       ),
                       const SizedBox(height: 12),
                     ],
+                    if (prpState.transportType == TransportType.localNetwork) ...[
+                      // LAN info text
+                      Card(
+                        color: theme.colorScheme.tertiaryContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: theme.colorScheme.onTertiaryContainer),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Scans the network this device is already connected to. Nothing to type: '
+                                  'press Connect and the other LocalSend devices on the same network answer.',
+                                  style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _buildActionButton(
                       theme: theme,
                       label: isLoading ? t.hotspotRelayPage.connecting : t.hotspotRelayPage.connect,
-                      icon: isLoading ? Icons.hourglass_top : (prpState.transportType == TransportType.usbTethering ? Icons.usb : Icons.wifi_find),
+                      icon: isLoading
+                          ? Icons.hourglass_top
+                          : switch (prpState.transportType) {
+                              TransportType.usbTethering => Icons.usb,
+                              TransportType.localNetwork => Icons.lan,
+                              TransportType.wifiHotspot => Icons.wifi_find,
+                            },
                       color: theme.colorScheme.primary,
                       onPressed: _canConnect(prpState)
                           ? () => prpService.dispatchAsync(
@@ -369,6 +428,29 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
             const SizedBox(height: 12),
 
             _buildRelayCard(theme),
+
+            // Non-fatal hint, e.g. the hotspot fell back to the LAN transport.
+            if (prpState.noticeMessage != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                color: theme.colorScheme.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: theme.colorScheme.onSecondaryContainer),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          prpState.noticeMessage!,
+                          style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
 
             // Error message
             if (prpState.errorMessage != null) ...[
@@ -404,7 +486,10 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
   }
 
   bool _canConnect(PrpState prpState) {
-    if (prpState.transportType == TransportType.usbTethering) {
+    // Only the hotspot transport needs an SSID: USB shares a cable, and the LAN
+    // transport joins the network the device is already on, so demanding one
+    // there would block the user on a field that cannot exist.
+    if (prpState.transportType != TransportType.wifiHotspot) {
       return prpState.state != PrpConnectionState.connecting;
     }
     return _ssidController.text.isNotEmpty && prpState.state != PrpConnectionState.connecting;
@@ -570,24 +655,52 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
   }
 
   String _getStatusSubtitle(PrpState prpState) {
-    final viaUsb = prpState.transportType == TransportType.usbTethering;
+    final isUsb = prpState.transportType == TransportType.usbTethering;
+    final isLan = prpState.transportType == TransportType.localNetwork;
+
     if (prpState.mode == PrpMode.host) {
-      if (prpState.state == PrpConnectionState.connected) {
-        return viaUsb ? 'USB tethering active' : t.hotspotRelayPage.statusHostActive;
-      }
-      if (prpState.state == PrpConnectionState.connecting) {
-        return viaUsb ? 'Starting USB tethering...' : t.hotspotRelayPage.statusHostStarting;
-      }
-      return viaUsb ? 'Enable USB tethering to start' : t.hotspotRelayPage.statusHostReady;
+      return switch (prpState.state) {
+        PrpConnectionState.connected =>
+          isLan
+              ? 'Announced on the local network'
+              : isUsb
+              ? 'USB tethering active'
+              : t.hotspotRelayPage.statusHostActive,
+        PrpConnectionState.connecting =>
+          isLan
+              ? 'Joining the local network...'
+              : isUsb
+              ? 'Starting USB tethering...'
+              : t.hotspotRelayPage.statusHostStarting,
+        _ =>
+          isLan
+              ? 'Ready to announce this device'
+              : isUsb
+              ? 'Enable USB tethering to start'
+              : t.hotspotRelayPage.statusHostReady,
+      };
     }
     if (prpState.mode == PrpMode.client) {
-      if (prpState.state == PrpConnectionState.connected) {
-        return viaUsb ? 'Connected via USB' : t.hotspotRelayPage.statusClientConnected;
-      }
-      if (prpState.state == PrpConnectionState.connecting) {
-        return viaUsb ? 'Connecting via USB...' : t.hotspotRelayPage.statusClientConnecting;
-      }
-      return viaUsb ? 'Connect USB cable and enable tethering' : t.hotspotRelayPage.statusClientReady;
+      return switch (prpState.state) {
+        PrpConnectionState.connected =>
+          isLan
+              ? 'Connected via the local network'
+              : isUsb
+              ? 'Connected via USB'
+              : t.hotspotRelayPage.statusClientConnected,
+        PrpConnectionState.connecting =>
+          isLan
+              ? 'Scanning the local network...'
+              : isUsb
+              ? 'Connecting via USB...'
+              : t.hotspotRelayPage.statusClientConnecting,
+        _ =>
+          isLan
+              ? 'Scan the network this device is on'
+              : isUsb
+              ? 'Connect USB cable and enable tethering'
+              : t.hotspotRelayPage.statusClientReady,
+      };
     }
     return t.hotspotRelayPage.statusSelectMode;
   }
@@ -635,6 +748,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
 
   Widget _buildConnectionInfoCard(ThemeData theme, PrpState prpState) {
     final isUsb = prpState.transportType == TransportType.usbTethering;
+    final isLan = prpState.transportType == TransportType.localNetwork;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -644,13 +758,21 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
             Row(
               children: [
                 Icon(
-                  isUsb ? Icons.usb : Icons.info,
+                  isUsb
+                      ? Icons.usb
+                      : isLan
+                      ? Icons.lan
+                      : Icons.info,
                   size: 20,
                   color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isUsb ? 'USB Connection' : t.hotspotRelayPage.connectionInfo,
+                  isUsb
+                      ? 'USB Connection'
+                      : isLan
+                      ? 'Local network'
+                      : t.hotspotRelayPage.connectionInfo,
                   style: theme.textTheme.titleMedium,
                 ),
               ],
@@ -663,6 +785,16 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                 theme,
                 'Status',
                 prpState.state == PrpConnectionState.connected ? 'Active' : 'Idle',
+              ),
+            ] else if (isLan) ...[
+              // No SSID, no password, no QR: there is nothing to hand out. The
+              // device is reachable by whoever is on the same network, and
+              // discovery shows it in the send tab.
+              Text(
+                'This device is discoverable on the network it is already connected to. '
+                'Other LocalSend devices on the same network find it automatically, '
+                'so there is no network name or password to share.',
+                style: theme.textTheme.bodyMedium,
               ),
             ] else ...[
               _infoRow(

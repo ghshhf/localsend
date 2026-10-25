@@ -90,6 +90,28 @@ void main() {
       expect(kept.ipAddress, 'C');
     });
 
+    test('copyWith keeps the notice apart from the error', () {
+      final state = PrpState(errorMessage: 'boom', noticeMessage: 'fell back');
+
+      // They are separate slots on purpose: a successful fallback must not be
+      // rendered in the red error card.
+      final clearedError = state.copyWith(clearError: true);
+      expect(clearedError.errorMessage, isNull);
+      expect(clearedError.noticeMessage, 'fell back');
+
+      final clearedNotice = state.copyWith(clearNotice: true);
+      expect(clearedNotice.noticeMessage, isNull);
+      expect(clearedNotice.errorMessage, 'boom');
+    });
+
+    test('copyWith keeps the notice unless clearNotice is set', () {
+      final state = PrpState(noticeMessage: 'fell back');
+
+      // Same "null means unchanged" contract as the other string fields.
+      expect(state.copyWith(noticeMessage: null).noticeMessage, 'fell back');
+      expect(state.copyWith().noticeMessage, 'fell back');
+    });
+
     test('copyWith clearRelay should clear relay fields', () {
       final state = PrpState(
         relayUrl: 'https://relay.example',
