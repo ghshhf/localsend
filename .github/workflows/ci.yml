@@ -39,8 +39,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0 # TEMPORARY: lets the diagnostic below read a past commit
       - name: Setup Flutter SDK
         uses: flutter-actions/setup-flutter@v4
         with:
@@ -50,15 +48,6 @@ jobs:
       # Generated code is gitignored, so every job that compiles has to rebuild
       # it first. This also runs `flutter pub get`.
       - uses: ./.github/actions/generate-code
-      # TEMPORARY - shows what the old committed artifacts looked like next to
-      # freshly generated ones. Remove once reviewed.
-      - name: Diff vs previous committed generated code
-        run: |
-          for f in app/lib/gen/assets.gen.dart app/lib/gen/strings.g.dart app/lib/gen/strings_en.g.dart app/lib/gen/strings_zh_CN.g.dart app/test/mocks.mocks.dart; do
-            echo "########## $f"
-            git show 181d87b:$f > /tmp/old.dart
-            diff -u /tmp/old.dart $f | head -60 || true
-          done
       - name: Dependencies (cargokit - rust_builder)
         working-directory: packages/localsend_isolates/rust_builder/cargokit/build_tool
         run: flutter pub get

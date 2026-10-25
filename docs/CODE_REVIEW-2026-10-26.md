@@ -367,3 +367,53 @@ final started = await transport.connect(
 
 拿差异的办法：CI 只报 `Formatted xxx.dart` 不给内容，于是临时在 format job 前插了一步 `dart format` + `diff -u` 打进日志（`d75f9c0`），拿到后立刻撤掉。这个临时步骤没有留在最终代码里。
 
+
+## 六、生成代码移出版本库（2026-10-26 同日）
+
+### 6.1 为什么这不是「加一行 .gitignore」
+
+入库的生成 Dart 有 **96 个文件、106,056 行**：
+
+| 来源 | 文件 | 生成方式 |
+|---|---|---|
+| `app/lib/gen/` | 60（59 个翻译 + `assets.gen.dart`） | `dart run slang` / flutter_gen |
+| `app/lib/**/*.mapper.dart` + `app/test/mocks.mocks.dart` | 24 | build_runner |
+| `packages/localsend_isolates/**/*.mapper.dart`、`*.freezed.dart` | 12 | build_runner |
+
+真正的阻力在 CI 之外：**6 个打包工作流都只做 `flutter pub get` 就直接 `flutter build`**，其中 `build_apk.yml` 与 `build_exe_unsigned.yml` 还挂在 `v*` tag 上。gen 一出库，它们会在**下次发版时**才炸。
+
+### 6.2 先证明能重建，再删
+
+删除前跑了一轮诊断（分支首个提交）：CI 重新执行 `build_runner` + `slang`，再 `git status` 对比。
+
+结果：app 侧写出 25 个产物、isolates 侧 12 个，**91 个文件与入库版本逐字节相同**，5 个不一致：
+
+| 文件 | 差异 | 判定 |
+|---|---|---|
+| `assets.gen.dart` | `class Assets { const Assets._(); }` → `abstract final class Assets` | flutter_gen 版本差异 |
+| `strings_en.g.dart` | `hotspotRelayPage` 整段（~100 行）位置重排 | 生成器排序变化 |
+| `strings_zh_CN.g.dart` | 同上，~138 行 | 同上 |
+| `strings.g.dart` | 头部 `Strings: 21022 (362/locale)` → `21082 (363/locale)` | **每语种多 1 条** |
+| `mocks.mocks.dart` | mockito 按 80 列重排 | 纯格式 |
+
+关键结论：入库的 gen **本来就落后于源 JSON**——`strings.g.dart` 里每个语种少一条字符串。所以这次移除不是「删掉能重建的东西」，而是顺带把「生成产物与源数据不一致且没人发现」这个问题一起修掉。同理，任何写进生成文件的手工修改从来都是下次 regenerate 就丢的，不存在「删掉了某个补丁」的风险。
+
+### 6.3 落地方案
+
+- **`.github/actions/generate-code`**（复合动作）：app `pub get` → isolates `build_runner` → app `slang` + `build_runner`。
+  **顺序不能反**：app 的 build_runner 要编译 `localsend_isolates`，而该包得先有自己的 mapper 才能被解析。
+- `ci.yml`：format job 删掉 `rm -rf lib/gen` 那一步（已经不需要绕过）；test job 用该动作。
+- `build_apk*`：用该动作，`build-dir` 指向 `$APK_BUILD_DIR`（它们先 `cp -r . /tmp/build` 再编，动作文件仍在 workspace 根所以能 `uses: ./`）。
+- `build_exe_test` / `build_zip_test` / `build_zip_arm64_test`：**内联**同样步骤，不用复合动作——这三个跑在 Windows runner（含 `windows-11-arm`）上，动作内部用 `bash`，不保证存在。
+- `build_exe_unsigned`：内联且带上 `PUB_CACHE`。复合动作收不到 step 级 env，而该文件把 pub cache 钉在 `runner.temp` 以便缓存。
+- `AGENTS.md` / `CONTRIBUTING.md`：写明全新 checkout 必须先跑 codegen，否则编不过。
+
+### 6.4 保留在库里的唯一例外
+
+flutter_rust_bridge 的产物（`frb_generated*.dart`、`lib/rust/api/*.dart`、`rust/src/frb_generated.rs`，共 18,438 行）**继续入库**。重生成它们需要单独安装 `flutter_rust_bridge_codegen` 并锁定 `=2.12.0`（与 `rust/Cargo.toml` 对齐），每轮 CI 现装不划算；而 rust job 的 `cargo check --package rust_lib_localsend_app` 已经在类型层面覆盖它。
+
+### 6.5 验证
+
+移除后整棵树跑通（PR #1，提交 `803e4ce`）：format ✅ / test ✅（`flutter analyze` 0 issue + 159 条测试）/ rust ✅ / packaging ✅。**这一步的意义是：全新 checkout 不依赖任何入库产物，靠 codegen 就能编译并测试通过。**
+
+未验证项：6 个打包工作流本机无法执行，改动按「与 ci.yml 语义等价」的方式插入；`build_apk_debug` 可在合并后用 `workflow_dispatch` 实跑一次作为抽样验证。
