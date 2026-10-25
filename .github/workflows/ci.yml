@@ -30,6 +30,12 @@ jobs:
       - name: Remove gen directory (app)
         working-directory: app
         run: rm -rf lib/gen
+      - name: Show format diff (temporary)
+        working-directory: app
+        run: |
+          cp test/unit/util/transport/local_network_transport_test.dart /tmp/before.dart
+          dart format test/unit/util/transport/local_network_transport_test.dart > /dev/null
+          diff -u /tmp/before.dart test/unit/util/transport/local_network_transport_test.dart || true
       - name: Check format (app)
         working-directory: app
         run: dart format --set-exit-if-changed lib test
