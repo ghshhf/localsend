@@ -19,9 +19,15 @@ After you have installed [Flutter](https://flutter.dev), then you can start this
 ```shell
 cd app
 flutter pub get
+dart run slang
 dart run build_runner build -d
 flutter run
 ```
+
+Generated Dart code is not part of the repository, so the two codegen commands above are
+required — without them the project will not compile. If you change anything under
+`packages/localsend_isolates`, also run `dart run build_runner build -d` in that directory
+first, before the app one.
 
 ## Translation
 

@@ -22,3 +22,19 @@
 
 # Generated at build time by makepri (see support/scripts/compile_windows_msix_helper.ps1)
 /support/build/msix/content/resources.pri
+
+# Generated Dart code: never commit it, always regenerate it.
+#   app/         -> dart run slang && dart run build_runner build
+#   isolates pkg -> dart run build_runner build
+# CI regenerates both through .github/actions/generate-code.
+#
+# Exception: packages/localsend_isolates/lib/rust/frb_generated*.dart,
+# lib/rust/api/*.dart and rust/src/frb_generated.rs stay in VCS. They come from
+# flutter_rust_bridge_codegen, which needs a separately installed binary pinned
+# to the same version as the Rust crate (2.12.0). Regenerating them on every CI
+# run is not worth that cost, and the Rust job already type-checks the output.
+/app/lib/gen/
+/app/test/mocks.mocks.dart
+*.g.dart
+*.mapper.dart
+*.freezed.dart

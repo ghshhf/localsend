@@ -27,9 +27,9 @@ jobs:
       - name: Dependencies (cargokit - rust_builder)
         working-directory: packages/localsend_isolates/rust_builder/cargokit/build_tool
         run: flutter pub get
-      - name: Remove gen directory (app)
-        working-directory: app
-        run: rm -rf lib/gen
+      # Generated code is gitignored, so this job only sees hand-written Dart.
+      # It used to `rm -rf lib/gen` first to keep the generated translations out
+      # of the check.
       - name: Check format (app)
         working-directory: app
         run: dart format --set-exit-if-changed lib test
@@ -45,9 +45,9 @@ jobs:
           version: ${{ env.FLUTTER_VERSION }}
           channel: "stable"
 
-      - name: Dependencies (app)
-        working-directory: app
-        run: flutter pub get
+      # Generated code is gitignored, so every job that compiles has to rebuild
+      # it first. This also runs `flutter pub get`.
+      - uses: ./.github/actions/generate-code
       - name: Dependencies (cargokit - rust_builder)
         working-directory: packages/localsend_isolates/rust_builder/cargokit/build_tool
         run: flutter pub get
