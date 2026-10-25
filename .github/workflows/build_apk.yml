@@ -88,9 +88,10 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Dependencies
-        working-directory: ${{ env.APK_BUILD_DIR }}/app
-        run: flutter pub get
+      - name: Codegen
+        uses: ./.github/actions/generate-code
+        with:
+          build-dir: ${{ env.APK_BUILD_DIR }}
 
       - name: Build APK (split per ABI)
         working-directory: ${{ env.APK_BUILD_DIR }}/app

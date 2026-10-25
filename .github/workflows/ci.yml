@@ -27,9 +27,9 @@ jobs:
       - name: Dependencies (cargokit - rust_builder)
         working-directory: packages/localsend_isolates/rust_builder/cargokit/build_tool
         run: flutter pub get
-      - name: Remove gen directory (app)
-        working-directory: app
-        run: rm -rf lib/gen
+      # Generated code is gitignored, so this job only sees hand-written Dart.
+      # It used to `rm -rf lib/gen` first to keep the generated translations out
+      # of the check.
       - name: Check format (app)
         working-directory: app
         run: dart format --set-exit-if-changed lib test
@@ -39,32 +39,29 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # TEMPORARY: lets the diagnostic below read a past commit
       - name: Setup Flutter SDK
         uses: flutter-actions/setup-flutter@v4
         with:
           version: ${{ env.FLUTTER_VERSION }}
           channel: "stable"
 
-      - name: Dependencies (app)
-        working-directory: app
-        run: flutter pub get
+      # Generated code is gitignored, so every job that compiles has to rebuild
+      # it first. This also runs `flutter pub get`.
+      - uses: ./.github/actions/generate-code
+      # TEMPORARY - shows what the old committed artifacts looked like next to
+      # freshly generated ones. Remove once reviewed.
+      - name: Diff vs previous committed generated code
+        run: |
+          for f in app/lib/gen/assets.gen.dart app/lib/gen/strings.g.dart app/lib/gen/strings_en.g.dart app/lib/gen/strings_zh_CN.g.dart app/test/mocks.mocks.dart; do
+            echo "########## $f"
+            git show 181d87b:$f > /tmp/old.dart
+            diff -u /tmp/old.dart $f | head -60 || true
+          done
       - name: Dependencies (cargokit - rust_builder)
         working-directory: packages/localsend_isolates/rust_builder/cargokit/build_tool
         run: flutter pub get
-      # TEMPORARY DIAGNOSTIC - remove once generated code leaves VCS.
-      # Regenerates every committed artifact and prints what changed, so we know
-      # whether a fresh checkout can reproduce the tree byte for byte.
-      - name: Codegen diff (diagnostic)
-        run: |
-          set -x
-          (cd packages/localsend_isolates && dart run build_runner build --delete-conflicting-outputs)
-          (cd app && dart run slang)
-          (cd app && dart run build_runner build --delete-conflicting-outputs)
-          set +x
-          echo "=== git status ==="
-          git status --porcelain
-          echo "=== diff stat ==="
-          git diff --stat
       - name: Analyze (app)
         working-directory: app
         run: flutter analyze
