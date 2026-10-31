@@ -91,8 +91,8 @@ Windows 二进制文件已签名。了解更多关于[代码签名政策][]的�
 
 | 平台    | 最低版本   | 备注                                                                                                                           |
 |---------|------------|--------------------------------------------------------------------------------------------------------------------------------|
-| Android | 5.0        | -                                                                                                                              |
-| iOS     | 12.0       | -                                                                                                                              |
+| Android | 7.0        | 最后一个支持 Android 5 和 6 的版本是 v1.17.0。                                                                                   |
+| iOS     | 13.0       | 最后一个支持 iOS 12 的版本是 v1.17.0。                                                                                          |
 | macOS   | 11 Big Sur | 请使用 OpenCore Legacy Patcher 2.0.2 （见 [#1005](https://github.com/localsend/localsend/issues/1005#issuecomment-2449899384)） |
 | Windows | 10         | 最后一个支持 Windows 7 的版本是 v1.15.4 。未来也许会将更新的版本向后移植至兼容 Windows 7 。                                    |
 | Linux   | 不适用     | 依赖：Gnome：`xdg-desktop-portal` 和 `xdg-desktop-portal-gtk`；KDE：`xdg-desktop-portal` 和 `xdg-desktop-portal-kde`           |
@@ -157,6 +157,21 @@ LocalSend 使用安全通信协议，允许设备通过 REST API 进行通信。
 ## 命令行界面
 
 LocalSend CLI 是一个基于 LocalSend 协议 v2 的终端客户端。
+
+在 macOS 和 Linux 上，使用 [Homebrew](https://brew.sh) 安装 CLI：
+
+```shell
+brew update
+brew install localsend-cli
+```
+
+如需升级已安装的 CLI：
+
+```shell
+brew update
+brew upgrade localsend-cli
+```
+
 运行 `localsend-cli --help` 查看所有可用选项和快捷键。
 
 使用 `send` 命令发送一个或多个文件、目录，或两者混合：
