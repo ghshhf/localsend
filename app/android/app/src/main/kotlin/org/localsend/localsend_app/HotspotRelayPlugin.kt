@@ -19,6 +19,8 @@ import androidx.annotation.RequiresApi
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.net.Inet4Address
+import java.net.NetworkInterface
 
 /**
  * PRP (Peer Relay Protocol) - Hotspot Relay Plugin for Android
@@ -39,6 +41,9 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
         // Intent actions for hotspot state changes
         private const val ACTION_HOTSPOT_STATE_CHANGED =
             "android.net.wifi.WIFI_AP_STATE_CHANGED"
+
+        // Grace period between onStarted and reading the AP address back.
+        private const val HOTSPOT_IP_READ_DELAY_MS = 300L
     }
 
     private var wifiManager: WifiManager? = null
@@ -145,15 +150,19 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                     Log.d(TAG, "Hotspot SSID: $ssid, Password: $password")
 
                     // Return hotspot info to Flutter
-                    val info = mapOf(
+                    val info = mapOf<String, Any>(
                         "ssid" to ssid,
                         "password" to password,
                         "isRunning" to true,
                     )
-                    result.success(info)
-
-                    // Register broadcast receiver to monitor hotspot state
-                    registerHotspotStateReceiver(reservation)
+                    // The AP interface only holds an address a moment after
+                    // onStarted, so read it back once the interface is up
+                    // instead of reporting an empty IP to Flutter.
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        result.success(info + ("ipAddress" to findHotspotIp()))
+                        // Register broadcast receiver to monitor hotspot state
+                        registerHotspotStateReceiver(reservation)
+                    }, HOTSPOT_IP_READ_DELAY_MS)
                 }
 
                 override fun onStopped() {
@@ -173,7 +182,7 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                         WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL ->
                             "No channel available"
                         WifiManager.LocalOnlyHotspotCallback.ERROR_GENERIC ->
-                            "Generic hotspot error"
+                            "Generic hotspot error (check the nearby devices permission)"
                         WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE ->
                             "Incompatible mode (tethering already active)"
                         else -> "Unknown error (code: $reason)"
@@ -299,7 +308,15 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                 Log.d(TAG, "Connected to hotspot network: $network")
                 // Attempt to bind to this network for discovery
                 cm.bindProcessToNetwork(network)
-                result.success(mapOf("connected" to true, "ssid" to ssid))
+                // The gateway of a local-only hotspot is the host itself, which
+                // is exactly the address the user needs to reach it.
+                result.success(
+                    mapOf(
+                        "connected" to true,
+                        "ssid" to ssid,
+                        "ipAddress" to resolveGatewayIp(cm, network),
+                    )
+                )
             }
 
             override fun onUnavailable() {
@@ -361,14 +378,12 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
      */
     private fun disconnectWifi(result: MethodChannel.Result) {
         Log.d(TAG, "disconnectWifi called")
-        unregisterNetworkCallback()
 
-        // Release the hotspot network
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            connectivityManager?.let { cm ->
-                networkCallback?.let { cm.unregisterNetworkCallback(it) }
-            }
-        }
+        // Unbind first: a process-level binding survives the network callback,
+        // so leaving it in place routes every later request through a network
+        // that no longer exists until the app is restarted.
+        connectivityManager?.bindProcessToNetwork(null)
+        unregisterNetworkCallback()
 
         result.success(mapOf("disconnected" to true))
     }
@@ -401,6 +416,56 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
     // ============================================================
 
     /**
+     * Address of this device on the WiFi AP interface it currently owns.
+     *
+     * LocalOnlyHotspot exposes no public getter for the AP address, so it is
+     * read from the interface table. The AP side ends in .1 on the stacks seen
+     * so far; when several site-local addresses exist that one wins, otherwise
+     * the first one is used.
+     */
+    private fun findHotspotIp(): String {
+        return try {
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return ""
+            val candidates = interfaces.asSequence()
+                .filter { it.isUp && !it.isLoopback }
+                .filterNot { isCellularInterface(it.name) }
+                .flatMap { it.inetAddresses.asSequence() }
+                .filterIsInstance<Inet4Address>()
+                .filter { it.isSiteLocalAddress }
+                .mapNotNull { it.hostAddress }
+                .toList()
+            candidates.firstOrNull { it.endsWith(".1") } ?: candidates.firstOrNull() ?: ""
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to resolve hotspot IP", e)
+            ""
+        }
+    }
+
+    /**
+     * Gateway of [network] — for a local-only hotspot that is the host device.
+     * A hotspot without internet has no default route, so the interface scan
+     * is the fallback rather than an exception path.
+     */
+    private fun resolveGatewayIp(cm: ConnectivityManager, network: Network): String {
+        return try {
+            val gateway = cm.getLinkProperties(network)
+                ?.routes
+                ?.firstOrNull { it.isDefaultRoute }
+                ?.gateway
+                ?.hostAddress
+            gateway ?: findHotspotIp()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to resolve gateway IP", e)
+            findHotspotIp()
+        }
+    }
+
+    private fun isCellularInterface(name: String?): Boolean {
+        val n = name ?: return false
+        return n.startsWith("rmnet") || n.startsWith("ccmni") || n.startsWith("pdp") || n == "dummy0"
+    }
+
+    /**
      * WifiManager exposes no public API to query soft-AP / LocalOnlyHotspot state.
      * We therefore track our own reservation first, and only fall back to the hidden
      * `isWifiApEnabled` API via reflection. That fallback is blocked by the hidden-API
@@ -427,6 +492,7 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                 "ssid" to (config.SSID?.trim('"') ?: ""),
                 "password" to (config.preSharedKey?.trim('"') ?: ""),
                 "isRunning" to true,
+                "ipAddress" to findHotspotIp(),
             )
         }
 
@@ -443,6 +509,7 @@ class HotspotRelayPlugin(private val activity: MainActivity) {
                     "ssid" to ((ssidField.get(config) as? String)?.trim('"') ?: ""),
                     "password" to ((pskField.get(config) as? String)?.trim('"') ?: ""),
                     "isRunning" to isHotspotRunning(),
+                    "ipAddress" to findHotspotIp(),
                 )
             } else {
                 null

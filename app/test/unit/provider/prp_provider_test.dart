@@ -46,6 +46,32 @@ void main() {
       final kept = state.copyWith();
       expect(kept.errorMessage, 'some error');
     });
+
+    test('copyWith clearNetwork should wipe name, password and ip', () {
+      // Teardown paths used to pass `null` here, which `??` silently ignored
+      // and left stale credentials rendered after stopping a host.
+      final state = PrpState(
+        networkName: 'LocalSend-Relay',
+        networkPassword: 'pass123',
+        ipAddress: '192.168.43.1',
+      );
+
+      final cleared = state.copyWith(clearNetwork: true);
+
+      expect(cleared.networkName, isNull);
+      expect(cleared.networkPassword, isNull);
+      expect(cleared.ipAddress, isNull);
+    });
+
+    test('copyWith without clearNetwork keeps existing network fields', () {
+      final state = PrpState(networkName: 'Net', networkPassword: 'pw', ipAddress: '10.0.0.1');
+
+      final updated = state.copyWith(state: PrpConnectionState.connected);
+
+      expect(updated.networkName, 'Net');
+      expect(updated.networkPassword, 'pw');
+      expect(updated.ipAddress, '10.0.0.1');
+    });
   });
 
   group('PrpService (ReduxNotifier)', () {

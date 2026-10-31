@@ -24,7 +24,6 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
   final _ssidController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  TransportType _selectedTransport = TransportType.wifiHotspot;
 
   @override
   void initState() {
@@ -71,6 +70,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
 
   Widget _buildTransportSelector() {
     final prpService = context.redux(prpProvider);
+    final prpState = context.ref.watch(prpProvider);
     final available = prpService.notifier.availableTransports;
     if (available.length <= 1) return const SizedBox.shrink();
 
@@ -86,11 +86,11 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text(_transportLabel(type)),
-                  selected: _selectedTransport == type,
-                  onSelected: (_) {
-                    setState(() => _selectedTransport = type);
-                    prpService.dispatch(SwitchTransportAction(type));
-                  },
+                  // The selected transport lives in PrpState only. Keeping a
+                  // second copy in widget state used to make the host and
+                  // client tabs disagree about which transport is active.
+                  selected: prpState.transportType == type,
+                  onSelected: (_) => prpService.dispatch(SwitchTransportAction(type)),
                 ),
               ),
             ),
@@ -156,11 +156,11 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
             // Start host mode button
             _buildActionButton(
               theme: theme,
-              label: _selectedTransport == TransportType.usbTethering ? 'Start USB Relay' : t.hotspotRelayPage.startHotspot,
-              icon: _selectedTransport == TransportType.usbTethering ? Icons.usb : Icons.wifi_tethering,
+              label: prpState.transportType == TransportType.usbTethering ? 'Start USB Relay' : t.hotspotRelayPage.startHotspot,
+              icon: prpState.transportType == TransportType.usbTethering ? Icons.usb : Icons.wifi_tethering,
               color: theme.colorScheme.primary,
               onPressed: () => prpService.dispatchAsync(
-                StartHostAction(transportType: _selectedTransport),
+                StartHostAction(transportType: prpState.transportType),
               ),
             ),
 
@@ -175,7 +175,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                     Icon(Icons.info_outline, color: theme.colorScheme.primary, size: 32),
                     const SizedBox(height: 8),
                     Text(
-                      _selectedTransport == TransportType.usbTethering
+                      prpState.transportType == TransportType.usbTethering
                           ? 'Connect your device via USB cable and enable USB tethering in system settings.\n\nData is transferred over the USB connection.'
                           : t.hotspotRelayPage.hostInfoText,
                       textAlign: TextAlign.center,
@@ -331,7 +331,7 @@ class _PrpPageState extends State<PrpPage> with SingleTickerProviderStateMixin {
                       onPressed: _canConnect(prpState)
                           ? () => prpService.dispatchAsync(
                               ConnectToPeerAction(
-                                transportType: _selectedTransport,
+                                transportType: prpState.transportType,
                                 ssid: _ssidController.text.trim(),
                                 password: _passwordController.text.trim(),
                               ),

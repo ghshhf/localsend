@@ -5,6 +5,7 @@ import 'package:localsend_app/util/transport/wifi_hotspot_transport_web.dart'
 
 import 'package:flutter/services.dart';
 import 'package:localsend_app/util/transport/transport_interface.dart';
+import 'package:localsend_app/util/transport/wifi_permissions.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('WifiHotspotTransport');
@@ -59,6 +60,15 @@ class WifiHotspotTransport implements TransportInterface {
     _logger.info('Starting WiFi hotspot (SSID: ${config.ssid ?? "auto"})');
     _setState(TransportState.connecting);
 
+    // Creating a hotspot needs a runtime grant on every supported Android
+    // release. Without it the platform call below fails with a generic error
+    // that tells the user nothing actionable.
+    final permissionError = await ensureHotspotPermissions();
+    if (permissionError != null) {
+      _setError(permissionError);
+      return false;
+    }
+
     try {
       final result = await _channel.invokeMethod<Map>('startHotspot');
       if (result == null) {
@@ -75,6 +85,9 @@ class WifiHotspotTransport implements TransportInterface {
         networkName: ssid,
         password: password,
         isRunning: isRunning,
+        metadata: {
+          'ipAddress': result['ipAddress'] as String? ?? '',
+        },
       );
 
       _setState(TransportState.connected);
@@ -104,6 +117,13 @@ class WifiHotspotTransport implements TransportInterface {
     _logger.info('Connecting to WiFi hotspot: ${config.ssid}');
     _setState(TransportState.connecting);
 
+    // Joining a network hits the same permission gate as creating one.
+    final permissionError = await ensureHotspotPermissions();
+    if (permissionError != null) {
+      _setError(permissionError);
+      return false;
+    }
+
     try {
       final result = await _channel.invokeMethod<Map>('connectToWifi', {
         'ssid': config.ssid,
@@ -117,6 +137,9 @@ class WifiHotspotTransport implements TransportInterface {
           networkName: config.ssid,
           password: config.password,
           isRunning: true,
+          metadata: {
+            'ipAddress': result?['ipAddress'] as String? ?? '',
+          },
         );
         _setState(TransportState.connected);
         _logger.info('Connected to: ${config.ssid}');

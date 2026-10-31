@@ -70,15 +70,21 @@ class PrpState {
     String? ipAddress,
     String? errorMessage,
     bool clearError = false,
+    /// Clears [networkName], [networkPassword] and [ipAddress] together.
+    ///
+    /// Passing `null` to those fields does not clear them, because `??` falls
+    /// back to the current value. Any teardown path must use this flag instead,
+    /// otherwise stale credentials keep being rendered after stopping a host.
+    bool clearNetwork = false,
     bool? isUsbTetheringAvailable,
   }) {
     return PrpState(
       mode: mode ?? this.mode,
       state: state ?? this.state,
       transportType: transportType ?? this.transportType,
-      networkName: networkName ?? this.networkName,
-      networkPassword: networkPassword ?? this.networkPassword,
-      ipAddress: ipAddress ?? this.ipAddress,
+      networkName: clearNetwork ? null : (networkName ?? this.networkName),
+      networkPassword: clearNetwork ? null : (networkPassword ?? this.networkPassword),
+      ipAddress: clearNetwork ? null : (ipAddress ?? this.ipAddress),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isUsbTetheringAvailable: isUsbTetheringAvailable ?? this.isUsbTetheringAvailable,
     );
@@ -100,16 +106,16 @@ class PrpService extends ReduxNotifier<PrpState> {
 
   @override
   PrpState init() {
-    // Async initialization: update USB availability once transport manager is ready.
-    // Uses fire-and-forget pattern since ReduxNotifier.init() must return synchronously.
+    // ReduxNotifier.init() must stay synchronous, so the transport probe runs
+    // afterwards and writes the result back itself. Nothing else refreshes
+    // this flag: without the assignment below the USB option never shows up
+    // in the UI, because availableTransports is read on the first build.
     _transportManager
         .init()
         .then((_) {
           final isUsbAvailable = _transportManager.availableTransports.contains(TransportType.usbTethering);
           if (isUsbAvailable != state.isUsbTetheringAvailable) {
-            // Note: state mutation here triggers a rebuild with updated USB availability.
-            // This is intentionally best-effort; the UI will show correct state
-            // once the first PRP action dispatches.
+            state = state.copyWith(isUsbTetheringAvailable: isUsbAvailable);
           }
         })
         .catchError((Object e, StackTrace st) {
@@ -147,6 +153,7 @@ class StartHostAction extends AsyncReduxAction<PrpService, PrpState> {
       mode: PrpMode.host,
       state: PrpConnectionState.connecting,
       transportType: transportType,
+      clearNetwork: true,
       clearError: true,
     );
 
@@ -166,6 +173,7 @@ class StartHostAction extends AsyncReduxAction<PrpService, PrpState> {
     } else {
       return state.copyWith(
         state: PrpConnectionState.error,
+        clearNetwork: true,
         errorMessage: notifier._transportManager.activeError ?? 'Failed to start host mode',
       );
     }
@@ -181,9 +189,7 @@ class StopHostAction extends AsyncReduxAction<PrpService, PrpState> {
     return state.copyWith(
       mode: PrpMode.idle,
       state: PrpConnectionState.disconnected,
-      networkName: null,
-      networkPassword: null,
-      ipAddress: null,
+      clearNetwork: true,
       clearError: true,
     );
   }
@@ -211,6 +217,7 @@ class ConnectToPeerAction extends AsyncReduxAction<PrpService, PrpState> {
       mode: PrpMode.client,
       state: PrpConnectionState.connecting,
       transportType: transportType,
+      clearNetwork: true,
       clearError: true,
     );
 
@@ -230,6 +237,7 @@ class ConnectToPeerAction extends AsyncReduxAction<PrpService, PrpState> {
     } else {
       return state.copyWith(
         state: PrpConnectionState.error,
+        clearNetwork: true,
         errorMessage: notifier._transportManager.activeError ?? 'Failed to connect',
       );
     }
@@ -245,9 +253,7 @@ class DisconnectPeerAction extends AsyncReduxAction<PrpService, PrpState> {
     return state.copyWith(
       mode: PrpMode.idle,
       state: PrpConnectionState.disconnected,
-      networkName: null,
-      networkPassword: null,
-      ipAddress: null,
+      clearNetwork: true,
       clearError: true,
     );
   }
