@@ -85,9 +85,19 @@ jobs:
           $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\signtool.exe' | Select-Object -Last 1
           & $signtool.FullName verify /pa /v app\windows\localsend_msix_helper.msix
 
-      - name: Dependencies
+      # Inlined instead of .github/actions/generate-code: that action runs under
+      # bash, which is not guaranteed on the Windows runners.
+      - name: Codegen (localsend_isolates)
+        working-directory: packages/localsend_isolates
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: Codegen (app)
         working-directory: app
-        run: flutter pub get
+        run: |
+          flutter pub get
+          dart run slang
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Compile for Windows
         working-directory: app

@@ -49,10 +49,24 @@ fvm dart run slang               # i18n codegen (slang_build_runner is disabled 
 fvm flutter run
 ```
 
+**Generated code is not committed.** `lib/gen/`, `app/test/mocks.mocks.dart` and every
+`*.g.dart` / `*.mapper.dart` / `*.freezed.dart` are gitignored, so a fresh clone does not
+compile until the two codegen commands above have run. `packages/localsend_isolates` needs
+its own `fvm dart run build_runner build` as well, and it has to run **first** — the app's
+build_runner compiles that package, mappers included.
+
+The only exception is the flutter_rust_bridge output (`lib/rust/frb_generated*.dart`,
+`lib/rust/api/*.dart`, `rust/src/frb_generated.rs`). It stays in git because regenerating it
+needs a separately installed `flutter_rust_bridge_codegen` binary pinned to the crate version.
+After running FRB codegen, commit those files like normal source.
+
+CI runs the same two commands through `.github/actions/generate-code` (the Windows build
+workflows inline them, since that action uses bash).
+
 Checks (what CI runs):
 
 ```bash
-fvm dart format --set-exit-if-changed lib test   # CI deletes lib/gen first; generated code is not format-checked
+fvm dart format --set-exit-if-changed lib test   # hand-written code only; generated files are gitignored
 fvm flutter analyze
 fvm flutter test
 fvm flutter test test/unit/util/security_helper_test.dart          # single file

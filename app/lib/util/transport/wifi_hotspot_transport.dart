@@ -18,11 +18,18 @@ final _logger = Logger('WifiHotspotTransport');
 /// Currently supports Android via [HotspotRelayPlugin].
 /// Cross-platform support planned per TransportInterface contract.
 class WifiHotspotTransport implements TransportInterface {
-  static const _channel = MethodChannel('org.localsend.localsend_app/hotspot_relay');
+  static const _channel = MethodChannel(
+    'org.localsend.localsend_app/hotspot_relay',
+  );
+  static const _eventChannel = EventChannel(
+    'org.localsend.localsend_app/hotspot_relay_events',
+  );
 
   TransportState _state = TransportState.idle;
   TransportInfo? _transportInfo;
   String? _errorMessage;
+  bool _disposed = false;
+  StreamSubscription<dynamic>? _nativeEventSub;
 
   final StreamController<PeerInfo> _peerController = StreamController<PeerInfo>.broadcast();
   final StreamController<TransportState> _stateController = StreamController<TransportState>.broadcast();
@@ -59,6 +66,7 @@ class WifiHotspotTransport implements TransportInterface {
   Future<bool> start({required HostConfig config}) async {
     _logger.info('Starting WiFi hotspot (SSID: ${config.ssid ?? "auto"})');
     _setState(TransportState.connecting);
+    _ensureNativeEvents();
 
     // Creating a hotspot needs a runtime grant on every supported Android
     // release. Without it the platform call below fails with a generic error
@@ -70,7 +78,7 @@ class WifiHotspotTransport implements TransportInterface {
     }
 
     try {
-      final result = await _channel.invokeMethod<Map>('startHotspot');
+      final result = await invokeChannel<Map>(_channel, 'startHotspot');
       if (result == null) {
         _setError('Failed to start hotspot: null response');
         return false;
@@ -80,13 +88,29 @@ class WifiHotspotTransport implements TransportInterface {
       final password = result['password'] as String? ?? '';
       final isRunning = result['isRunning'] as bool? ?? false;
 
+      if (!isRunning) {
+        // The native side returned a map but says the hotspot is not running.
+        // Reporting success here leaves the UI showing a QR code for an SSID
+        // that no peer can join, which is worse than an explicit failure.
+        _setError('Failed to start hotspot: native reported isRunning=false');
+        return false;
+      }
+
+      var ipAddress = result['ipAddress'] as String? ?? '';
+      if (ipAddress.isEmpty) {
+        // The AP interface may still be coming up when onStarted fires, so a
+        // single re-read after a short delay is what actually yields an address.
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        ipAddress = (await getCurrentInfo()).metadata['ipAddress'] as String? ?? '';
+      }
+
       _transportInfo = TransportInfo(
         type: TransportType.wifiHotspot,
         networkName: ssid,
         password: password,
         isRunning: isRunning,
         metadata: {
-          'ipAddress': result['ipAddress'] as String? ?? '',
+          'ipAddress': ipAddress,
         },
       );
 
@@ -103,7 +127,7 @@ class WifiHotspotTransport implements TransportInterface {
   Future<void> stop() async {
     _logger.info('Stopping WiFi hotspot');
     try {
-      await _channel.invokeMethod('stopHotspot');
+      await invokeChannel(_channel, 'stopHotspot');
     } catch (e) {
       _logger.warning('Error stopping hotspot: $e');
     }
@@ -116,6 +140,7 @@ class WifiHotspotTransport implements TransportInterface {
   Future<bool> connect({required ConnectConfig config}) async {
     _logger.info('Connecting to WiFi hotspot: ${config.ssid}');
     _setState(TransportState.connecting);
+    _ensureNativeEvents();
 
     // Joining a network hits the same permission gate as creating one.
     final permissionError = await ensureHotspotPermissions();
@@ -125,7 +150,7 @@ class WifiHotspotTransport implements TransportInterface {
     }
 
     try {
-      final result = await _channel.invokeMethod<Map>('connectToWifi', {
+      final result = await invokeChannel<Map>(_channel, 'connectToWifi', {
         'ssid': config.ssid,
         'password': config.password,
       });
@@ -158,7 +183,7 @@ class WifiHotspotTransport implements TransportInterface {
   Future<void> disconnect() async {
     _logger.info('Disconnecting from WiFi hotspot');
     try {
-      await _channel.invokeMethod('disconnectWifi');
+      await invokeChannel(_channel, 'disconnectWifi');
     } catch (e) {
       _logger.warning('Error disconnecting: $e');
     }
@@ -170,7 +195,10 @@ class WifiHotspotTransport implements TransportInterface {
   /// Check if currently connected to a hotspot network (no-internet WiFi).
   Future<bool> isConnectedToHotspot() async {
     try {
-      final result = await _channel.invokeMethod<bool>('isConnectedToHotspot');
+      final result = await invokeChannel<bool>(
+        _channel,
+        'isConnectedToHotspot',
+      );
       return result ?? false;
     } catch (e) {
       return false;
@@ -180,13 +208,16 @@ class WifiHotspotTransport implements TransportInterface {
   /// Get current hotspot info.
   Future<TransportInfo> getCurrentInfo() async {
     try {
-      final result = await _channel.invokeMethod<Map>('getHotspotInfo');
+      final result = await invokeChannel<Map>(_channel, 'getHotspotInfo');
       if (result != null) {
         return TransportInfo(
           type: TransportType.wifiHotspot,
           networkName: result['ssid'] as String? ?? '',
           password: result['password'] as String? ?? '',
           isRunning: result['isRunning'] as bool? ?? false,
+          metadata: {
+            'ipAddress': result['ipAddress'] as String? ?? '',
+          },
         );
       }
     } catch (e) {
@@ -197,9 +228,54 @@ class WifiHotspotTransport implements TransportInterface {
 
   @override
   Future<void> dispose() async {
-    await stop();
+    if (_disposed) return;
+    _disposed = true;
+    try {
+      await stop();
+    } catch (e) {
+      _logger.warning('Error stopping during dispose: $e');
+    }
+    final sub = _nativeEventSub;
+    _nativeEventSub = null;
+    if (sub != null) {
+      try {
+        // EventChannel's onCancel touches the binary messenger; in binding-less
+        // unit tests cancel() completes with an error — swallow it.
+        await sub.cancel();
+      } catch (e) {
+        _logger.warning('Error cancelling hotspot event subscription: $e');
+      }
+    }
     await _peerController.close();
     await _stateController.close();
+  }
+
+  // ============================================================
+  //  Native event stream (hotspot stopped externally, etc.)
+  // ============================================================
+
+  /// Subscribe to native-side events lazily (on first start/connect), and
+  /// only when a binding exists — unit tests without one never subscribe.
+  void _ensureNativeEvents() {
+    if (_disposed || _nativeEventSub != null || !channelBindingAvailable) return;
+    try {
+      _nativeEventSub = _eventChannel.receiveBroadcastStream().listen(
+        (event) {
+          if (event is Map && event['event'] == 'hotspotStopped') {
+            _logger.info('Native event: hotspot stopped externally');
+            if (_state == TransportState.connected) {
+              _transportInfo = null;
+              _setState(TransportState.disconnected);
+            }
+          }
+        },
+        onError: (Object e) {
+          _logger.warning('Hotspot event stream error: $e');
+        },
+      );
+    } catch (e) {
+      _logger.warning('Failed to listen to hotspot events: $e');
+    }
   }
 
   // ============================================================
@@ -207,12 +283,17 @@ class WifiHotspotTransport implements TransportInterface {
   // ============================================================
 
   void _setState(TransportState newState) {
+    if (_disposed) return;
     _state = newState;
     _stateController.add(newState);
   }
 
   void _setError(String message) {
+    if (_disposed) return;
     _errorMessage = message;
+    // Drop stale connection info: a failed start/connect must not leave
+    // activeInfo pointing at the previous SSID.
+    _transportInfo = null;
     _state = TransportState.error;
     _stateController.add(TransportState.error);
     _logger.severe(message);

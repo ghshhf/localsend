@@ -47,38 +47,91 @@ void main() {
       expect(kept.errorMessage, 'some error');
     });
 
-    test('copyWith clearNetwork should wipe name, password and ip', () {
-      // Teardown paths used to pass `null` here, which `??` silently ignored
-      // and left stale credentials rendered after stopping a host.
+    test('copyWith clearNetwork should clear connection fields', () {
       final state = PrpState(
+        mode: PrpMode.host,
+        state: PrpConnectionState.connected,
         networkName: 'LocalSend-Relay',
-        networkPassword: 'pass123',
+        networkPassword: 'secret123',
         ipAddress: '192.168.43.1',
       );
 
-      final cleared = state.copyWith(clearNetwork: true);
+      // Regression guard: passing null used to mean "keep", so StopHostAction
+      // left the previous SSID/password on screen after stopping the hotspot.
+      final cleared = state.copyWith(
+        mode: PrpMode.idle,
+        state: PrpConnectionState.disconnected,
+        clearNetwork: true,
+      );
 
       expect(cleared.networkName, isNull);
       expect(cleared.networkPassword, isNull);
       expect(cleared.ipAddress, isNull);
+      expect(cleared.mode, PrpMode.idle);
+      expect(cleared.isActive, false);
     });
 
-    test('copyWith without clearNetwork keeps existing network fields', () {
-      final state = PrpState(networkName: 'Net', networkPassword: 'pw', ipAddress: '10.0.0.1');
+    test('copyWith keeps connection fields unless clearNetwork is set', () {
+      final state = PrpState(
+        networkName: 'A',
+        networkPassword: 'B',
+        ipAddress: 'C',
+      );
 
-      final updated = state.copyWith(state: PrpConnectionState.connected);
+      // Pins the "null means unchanged" contract that the callers rely on.
+      final kept = state.copyWith(
+        networkName: null,
+        networkPassword: null,
+        ipAddress: null,
+      );
 
-      expect(updated.networkName, 'Net');
-      expect(updated.networkPassword, 'pw');
-      expect(updated.ipAddress, '10.0.0.1');
+      expect(kept.networkName, 'A');
+      expect(kept.networkPassword, 'B');
+      expect(kept.ipAddress, 'C');
+    });
+
+    test('copyWith keeps the notice apart from the error', () {
+      final state = PrpState(errorMessage: 'boom', noticeMessage: 'fell back');
+
+      // They are separate slots on purpose: a successful fallback must not be
+      // rendered in the red error card.
+      final clearedError = state.copyWith(clearError: true);
+      expect(clearedError.errorMessage, isNull);
+      expect(clearedError.noticeMessage, 'fell back');
+
+      final clearedNotice = state.copyWith(clearNotice: true);
+      expect(clearedNotice.noticeMessage, isNull);
+      expect(clearedNotice.errorMessage, 'boom');
+    });
+
+    test('copyWith keeps the notice unless clearNotice is set', () {
+      final state = PrpState(noticeMessage: 'fell back');
+
+      // Same "null means unchanged" contract as the other string fields.
+      expect(state.copyWith(noticeMessage: null).noticeMessage, 'fell back');
+      expect(state.copyWith().noticeMessage, 'fell back');
+    });
+
+    test('copyWith clearRelay should clear relay fields', () {
+      final state = PrpState(
+        relayUrl: 'https://relay.example',
+        relayDeviceId: 'dev-1',
+        relayInstruction: 'ping',
+        relayLastEcho: 'pong',
+      );
+
+      final cleared = state.copyWith(clearRelay: true);
+
+      expect(cleared.relayUrl, isNull);
+      expect(cleared.relayDeviceId, isNull);
+      expect(cleared.relayInstruction, isNull);
+      expect(cleared.relayLastEcho, isNull);
     });
   });
 
   group('PrpService (ReduxNotifier)', () {
     test('init returns idle state', () {
-      final service = ReduxNotifier.test(
-        redux: PrpService(),
-      );
+      final service = ReduxNotifier.test(redux: PrpService());
 
       expect(service.state.mode, PrpMode.idle);
       expect(service.state.state, PrpConnectionState.idle);
@@ -86,9 +139,7 @@ void main() {
     });
 
     test('ResetPrpAction resets to idle', () {
-      final service = ReduxNotifier.test(
-        redux: PrpService(),
-      );
+      final service = ReduxNotifier.test(redux: PrpService());
 
       // ResetPrpAction is an AsyncReduxAction; verify dispatch accepts it.
       // State should remain idle after init (async USB check runs in background).
@@ -121,13 +172,16 @@ void main() {
   group('PrpMode enum', () {
     test('has all expected values', () {
       expect(PrpMode.values, hasLength(3));
-      expect(PrpMode.values, containsAll([PrpMode.host, PrpMode.client, PrpMode.idle]));
+      expect(
+        PrpMode.values,
+        containsAll([PrpMode.host, PrpMode.client, PrpMode.idle]),
+      );
     });
   });
 
   group('PrpConnectionState enum', () {
     test('has all expected values', () {
-      expect(PrpConnectionState.values, hasLength(6));
+      expect(PrpConnectionState.values, hasLength(5));
 
       expect(
         PrpConnectionState.values,
@@ -135,7 +189,6 @@ void main() {
           PrpConnectionState.idle,
           PrpConnectionState.connecting,
           PrpConnectionState.connected,
-          PrpConnectionState.transferring,
           PrpConnectionState.error,
           PrpConnectionState.disconnected,
         ]),

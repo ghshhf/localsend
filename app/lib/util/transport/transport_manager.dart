@@ -17,18 +17,33 @@ final _logger = Logger('TransportManager');
 /// actual transport operations without knowing the specifics
 /// of each transport implementation.
 class TransportManager {
+  /// [lanDiscovery] is the app-wide discovery the LAN transport observes. It is
+  /// optional so unit tests can construct a manager without a Refena container;
+  /// without it the LAN transport reports itself as unavailable.
+  TransportManager({LanDiscovery? lanDiscovery}) : _localNetworkTransport = LocalNetworkTransport(discovery: lanDiscovery);
+
   final WifiHotspotTransport _wifiTransport = WifiHotspotTransport();
   final UsbTetheringTransport _usbTransport = UsbTetheringTransport();
-  final LocalNetworkTransport _localNetworkTransport = LocalNetworkTransport();
+  final LocalNetworkTransport _localNetworkTransport;
   TransportInterface? _activeTransport;
   bool _initialized = false;
+  bool _disposed = false;
+
+  /// Subscriptions to each transport's streams. Held so [dispose] can cancel
+  /// them — closing the controllers alone leaves the sources still pushing into
+  /// this manager, and a later re-init would subscribe a second time.
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
 
   // Aggregated streams
   final StreamController<PeerInfo> _peerController = StreamController<PeerInfo>.broadcast();
   final StreamController<TransportState> _stateController = StreamController<TransportState>.broadcast();
 
   /// All available transports.
-  List<TransportInterface> get transports => [_wifiTransport, _usbTransport, _localNetworkTransport];
+  List<TransportInterface> get transports => [
+    _wifiTransport,
+    _usbTransport,
+    _localNetworkTransport,
+  ];
 
   /// The currently active transport, if any.
   TransportInterface? get activeTransport => _activeTransport;
@@ -52,28 +67,46 @@ class TransportManager {
       await _usbTransport.init();
 
       // Wire up WiFi transport events
-      _wifiTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
-      _wifiTransport.onStateChanged.listen((state) {
-        if (_activeTransport == _wifiTransport) {
-          _stateController.add(state);
-        }
-      });
+      _subscriptions.add(
+        _wifiTransport.onPeerDiscovered.listen(
+          (peer) => _peerController.add(peer),
+        ),
+      );
+      _subscriptions.add(
+        _wifiTransport.onStateChanged.listen((state) {
+          if (_activeTransport == _wifiTransport) {
+            _stateController.add(state);
+          }
+        }),
+      );
 
       // Wire up USB transport events
-      _usbTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
-      _usbTransport.onStateChanged.listen((state) {
-        if (_activeTransport == _usbTransport) {
-          _stateController.add(state);
-        }
-      });
+      _subscriptions.add(
+        _usbTransport.onPeerDiscovered.listen(
+          (peer) => _peerController.add(peer),
+        ),
+      );
+      _subscriptions.add(
+        _usbTransport.onStateChanged.listen((state) {
+          if (_activeTransport == _usbTransport) {
+            _stateController.add(state);
+          }
+        }),
+      );
 
-      // Wire up local network transport events (stub, not yet implemented)
-      _localNetworkTransport.onPeerDiscovered.listen((peer) => _peerController.add(peer));
-      _localNetworkTransport.onStateChanged.listen((state) {
-        if (_activeTransport == _localNetworkTransport) {
-          _stateController.add(state);
-        }
-      });
+      // Wire up local network transport events (observes the app-wide discovery)
+      _subscriptions.add(
+        _localNetworkTransport.onPeerDiscovered.listen(
+          (peer) => _peerController.add(peer),
+        ),
+      );
+      _subscriptions.add(
+        _localNetworkTransport.onStateChanged.listen((state) {
+          if (_activeTransport == _localNetworkTransport) {
+            _stateController.add(state);
+          }
+        }),
+      );
 
       _initialized = true;
       _logger.info('Transport manager initialized');
@@ -96,16 +129,20 @@ class TransportManager {
   }
 
   /// Start host mode on the given transport type.
-  Future<bool> startHost({required TransportType type, required HostConfig config}) async {
+  Future<bool> startHost({
+    required TransportType type,
+    required HostConfig config,
+  }) async {
     final transport = getTransport(type);
     if (transport == null) {
       _logger.warning('Transport $type not available');
       return false;
     }
 
-    // Stop any active transport first
+    // Fully tear down any active transport first. Using disconnect() only
+    // would leave a running hotspot alive (stopHotspot != disconnectWifi).
     if (_activeTransport != null && _activeTransport != transport) {
-      await _activeTransport!.disconnect();
+      await _teardown(_activeTransport!);
     }
 
     _activeTransport = transport;
@@ -114,16 +151,19 @@ class TransportManager {
   }
 
   /// Connect to a host via the given transport type.
-  Future<bool> connectToHost({required TransportType type, required ConnectConfig config}) async {
+  Future<bool> connectToHost({
+    required TransportType type,
+    required ConnectConfig config,
+  }) async {
     final transport = getTransport(type);
     if (transport == null) {
       _logger.warning('Transport $type not available');
       return false;
     }
 
-    // Stop any active transport first
+    // Fully tear down any active transport first.
     if (_activeTransport != null && _activeTransport != transport) {
-      await _activeTransport!.disconnect();
+      await _teardown(_activeTransport!);
     }
 
     _activeTransport = transport;
@@ -131,21 +171,54 @@ class TransportManager {
     return transport.connect(config: config);
   }
 
-  /// Stop the active transport.
-  Future<void> stopActive() async {
+  /// Stop the active transport (host mode).
+  ///
+  /// Returns true if there was nothing to stop or the stop succeeded.
+  Future<bool> stopActive() async {
     if (_activeTransport != null) {
       _logger.info('Stopping active transport: ${_activeTransport!.type}');
-      await _activeTransport!.stop();
-      _activeTransport = null;
+      try {
+        await _activeTransport!.stop();
+        _activeTransport = null;
+        return true;
+      } catch (e) {
+        _logger.warning('Failed to stop active transport: $e');
+        return false;
+      }
     }
+    return true;
   }
 
-  /// Disconnect the active transport.
-  Future<void> disconnectActive() async {
+  /// Disconnect the active transport (client mode).
+  ///
+  /// Returns true if there was nothing to disconnect or it succeeded.
+  Future<bool> disconnectActive() async {
     if (_activeTransport != null) {
       _logger.info('Disconnecting active transport: ${_activeTransport!.type}');
-      await _activeTransport!.disconnect();
-      _activeTransport = null;
+      try {
+        await _activeTransport!.disconnect();
+        _activeTransport = null;
+        return true;
+      } catch (e) {
+        _logger.warning('Failed to disconnect active transport: $e');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Fully tear down a transport: stop host mode (if any) and disconnect
+  /// (if connected as a client). Safe to call on idle transports.
+  Future<void> _teardown(TransportInterface transport) async {
+    try {
+      await transport.stop();
+    } catch (e) {
+      _logger.warning('Error stopping ${transport.type}: $e');
+    }
+    try {
+      await transport.disconnect();
+    } catch (e) {
+      _logger.warning('Error disconnecting ${transport.type}: $e');
     }
   }
 
@@ -169,8 +242,19 @@ class TransportManager {
 
   /// Clean up all resources.
   Future<void> dispose() async {
-    if (!_initialized) return;
+    if (_disposed) return;
+    _disposed = true;
     await stopActive();
+    // Cancel source subscriptions first so nothing pushes into the controllers
+    // while they are being closed.
+    for (final sub in _subscriptions) {
+      try {
+        await sub.cancel();
+      } catch (e) {
+        _logger.warning('Error cancelling transport subscription: $e');
+      }
+    }
+    _subscriptions.clear();
     await _wifiTransport.dispose();
     await _usbTransport.dispose();
     await _localNetworkTransport.dispose();
